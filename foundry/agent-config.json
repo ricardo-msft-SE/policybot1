@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.ai.azure.com/agents/v1/agent.json",
+  "name": "policy-bot",
+  "displayName": "Policy Bot",
+  "description": "AI-powered assistant for government policy research with grounded answers and reliable citations",
+  "version": "1.0.0",
+  "type": "prompt",
+  "configuration": {
+    "model": {
+      "provider": "azure-openai",
+      "deployment": "gpt-4o",
+      "parameters": {
+        "temperature": 0.1,
+        "topP": 0.95,
+        "maxTokens": 4096,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      }
+    },
+    "systemPrompt": {
+      "file": "prompts/system-prompt.md"
+    },
+    "knowledge": {
+      "sources": [
+        {
+          "type": "azure-ai-search",
+          "name": "ohio-revised-code",
+          "description": "Ohio Revised Code and government policy documents",
+          "configuration": {
+            "indexName": "policy-index",
+            "semanticConfiguration": "policy-semantic-config",
+            "queryType": "hybrid",
+            "topK": 5,
+            "strictness": 3,
+            "inScope": true
+          }
+        }
+      ]
+    },
+    "grounding": {
+      "enabled": true,
+      "strictMode": true,
+      "includeCitations": true,
+      "citationFormat": {
+        "style": "markdown",
+        "includeUrl": true,
+        "includeQuotes": true
+      }
+    },
+    "safety": {
+      "contentFiltering": "default",
+      "blockedTopics": [],
+      "customBlocklist": []
+    }
+  },
+  "capabilities": {
+    "multiTurn": true,
+    "contextWindow": 128000,
+    "streamingEnabled": true
+  },
+  "metadata": {
+    "author": "Policy Bot Team",
+    "repository": "https://github.com/ricardo-msft-SE/policybot1",
+    "documentation": "https://github.com/ricardo-msft-SE/policybot1/blob/main/README.md",
+    "tags": [
+      "government",
+      "policy",
+      "legal",
+      "ohio",
+      "rag",
+      "grounded"
+    ]
+  }
+}

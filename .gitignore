@@ -1,0 +1,84 @@
+# Log files
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Azure deployment files
+.azure/
+azds.yaml
+
+# IDE and editor files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Build outputs
+dist/
+build/
+out/
+bin/
+obj/
+
+# Dependencies (if any code is added)
+node_modules/
+__pycache__/
+*.pyc
+.Python
+venv/
+ENV/
+
+# Terraform state (if used)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Generated files
+foundry/search-config.json
+*.generated.json
+
+# Secrets and credentials
+*.pem
+*.key
+secrets.json
+credentials.json
+*-secrets.yaml
+*-secrets.yml
+
+# Bicep outputs
+*.json.bak
+
+# Test outputs
+coverage/
+.nyc_output/
+test-results/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
