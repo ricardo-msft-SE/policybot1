@@ -1,0 +1,16 @@
+# Policy Bot Python Dependencies
+# 
+# Install with: pip install -r requirements.txt
+
+# Azure AI Projects SDK - For programmatic agent creation
+azure-ai-projects>=1.0.0
+
+# Azure Identity - For authentication (DefaultAzureCredential)
+azure-identity>=1.15.0
+
+# Azure AI Evaluation - For agent evaluation
+azure-ai-evaluation>=1.0.0
+
+# Optional: For running evaluations
+openai>=1.0.0
+pandas>=2.0.0

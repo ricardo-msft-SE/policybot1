@@ -224,6 +224,10 @@ For better semantic understanding:
 
 ## Create the Foundry Agent
 
+You can create the agent using either the **Portal UI** (beginner-friendly) or **Python SDK** (programmatic/CI-CD).
+
+### Option A: Portal UI (Recommended for Beginners)
+
 ### Step 9: Access Microsoft Foundry
 
 1. Navigate to [AI Foundry Portal](https://ai.azure.com)
@@ -312,6 +316,280 @@ flowchart LR
    - ✅ Exact quote from source
    - ✅ URL citation
    - ✅ Section reference
+
+---
+
+### Option B: Programmatic Creation (Python SDK)
+
+For automation, CI/CD pipelines, or infrastructure-as-code workflows, use the **Azure AI Projects SDK**.
+
+#### Prerequisites
+
+```bash
+# Install the Azure AI Projects SDK
+pip install azure-ai-projects azure-identity
+```
+
+#### Step 9B: Create Agent Programmatically
+
+Create a file `scripts/create-agent.py`:
+
+```python
+"""
+Policy Bot Agent Creation Script
+Creates the Policy Bot agent programmatically using Azure AI Projects SDK
+"""
+import os
+from azure.identity import DefaultAzureCredential
+from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import (
+    AzureAISearchTool,
+    AzureAISearchToolParameters,
+)
+
+# Configuration - Update these values
+PROJECT_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT")  
+# Format: https://<resource>.services.ai.azure.com/api/projects/<project-name>
+
+SEARCH_SERVICE_ENDPOINT = os.environ.get("AZURE_SEARCH_ENDPOINT")
+# Format: https://<search-service>.search.windows.net
+
+SEARCH_INDEX_NAME = os.environ.get("AZURE_SEARCH_INDEX", "policy-index")
+MODEL_DEPLOYMENT = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+# System prompt from foundry/prompts/system-prompt.md
+SYSTEM_PROMPT = """You are Policy Bot, an expert assistant for government policy research.
+
+## Core Rules
+
+1. **ONLY use information from the provided search results**
+2. **NEVER make up or assume policy information**
+3. **Always cite your sources with exact quotes**
+
+## Citation Format
+
+For every claim, include:
+- The exact quote from the source
+- The source URL
+- The relevant section/title
+
+Example response format:
+
+According to Ohio Revised Code Section 4511.01:
+> "Vehicle means every device, including a motorized bicycle and 
+> an electric bicycle, in, upon, or by which any person or property 
+> may be transported..."
+
+Source: https://codes.ohio.gov/ohio-revised-code/section-4511.01
+
+## When You Don't Know
+
+If the search results don't contain relevant information, say:
+"I couldn't find specific information about [topic] in the indexed 
+policy documents. Please try rephrasing your question or verify 
+this topic is covered in the Ohio Revised Code."
+"""
+
+def create_policy_bot_agent():
+    """Create the Policy Bot agent with Azure AI Search integration."""
+    
+    # Authenticate using DefaultAzureCredential (supports CLI, managed identity, etc.)
+    credential = DefaultAzureCredential()
+    
+    # Initialize the AI Project client
+    client = AIProjectClient(
+        endpoint=PROJECT_ENDPOINT,
+        credential=credential
+    )
+    
+    # Configure Azure AI Search as a knowledge source
+    search_tool = AzureAISearchTool(
+        parameters=AzureAISearchToolParameters(
+            index_connection_id=f"{SEARCH_SERVICE_ENDPOINT}/indexes/{SEARCH_INDEX_NAME}",
+            index_name=SEARCH_INDEX_NAME,
+            query_type="vector_semantic_hybrid",
+            semantic_configuration="policy-semantic-config",
+            top_n=10,
+            strictness=3,
+            in_scope=True,  # Critical: Only use search results, no external knowledge
+        )
+    )
+    
+    # Create the agent
+    agent = client.agents.create(
+        name="policy-bot",
+        model=MODEL_DEPLOYMENT,
+        instructions=SYSTEM_PROMPT,
+        tools=[search_tool],
+        temperature=0.1,  # Low temperature for factual responses
+        metadata={
+            "purpose": "Government policy research assistant",
+            "source": "Ohio Revised Code",
+            "created_by": "policybot-deployment-script"
+        }
+    )
+    
+    print(f"✅ Agent created successfully!")
+    print(f"   Agent ID: {agent.id}")
+    print(f"   Name: {agent.name}")
+    print(f"   Model: {agent.model}")
+    
+    return agent
+
+
+def test_agent(agent_id: str, test_query: str = "What is the legal definition of a vehicle in Ohio?"):
+    """Test the created agent with a sample query."""
+    
+    credential = DefaultAzureCredential()
+    client = AIProjectClient(
+        endpoint=PROJECT_ENDPOINT,
+        credential=credential
+    )
+    
+    # Create a thread for the conversation
+    thread = client.agents.threads.create()
+    
+    # Send test message
+    client.agents.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=test_query
+    )
+    
+    # Run the agent
+    run = client.agents.runs.create_and_wait(
+        thread_id=thread.id,
+        agent_id=agent_id
+    )
+    
+    # Get the response
+    messages = client.agents.messages.list(thread_id=thread.id)
+    response = messages.data[0].content[0].text.value
+    
+    print(f"\n📝 Test Query: {test_query}")
+    print(f"\n🤖 Agent Response:\n{response}")
+    
+    # Verify response quality
+    has_citation = "Source:" in response or "http" in response
+    has_quote = ">" in response or '\"' in response
+    
+    print(f"\n✅ Has citation: {has_citation}")
+    print(f"✅ Has quote: {has_quote}")
+    
+    return response
+
+
+if __name__ == "__main__":
+    # Create the agent
+    agent = create_policy_bot_agent()
+    
+    # Optionally test it
+    print("\n" + "="*50)
+    print("Testing agent...")
+    print("="*50)
+    test_agent(agent.id)
+```
+
+#### Step 10B: Run the Creation Script
+
+```powershell
+# Set environment variables
+$env:AZURE_AI_PROJECT_ENDPOINT = "https://your-resource.services.ai.azure.com/api/projects/policybot"
+$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
+$env:AZURE_SEARCH_INDEX = "policy-index"
+$env:AZURE_OPENAI_DEPLOYMENT = "gpt-4o"
+
+# Login to Azure (if not already)
+az login
+
+# Run the script
+python scripts/create-agent.py
+```
+
+**Expected Output:**
+```
+✅ Agent created successfully!
+   Agent ID: asst_abc123xyz
+   Name: policy-bot
+   Model: gpt-4o
+
+==================================================
+Testing agent...
+==================================================
+
+📝 Test Query: What is the legal definition of a vehicle in Ohio?
+
+🤖 Agent Response:
+According to Ohio Revised Code Section 4511.01:
+> "Vehicle means every device, including a motorized bicycle..."
+
+Source: https://codes.ohio.gov/ohio-revised-code/section-4511.01
+
+✅ Has citation: True
+✅ Has quote: True
+```
+
+#### Additional SDK Operations
+
+```python
+# List all agents in your project
+agents = client.agents.list()
+for agent in agents.data:
+    print(f"{agent.name}: {agent.id}")
+
+# Update an existing agent
+client.agents.update(
+    agent_id="asst_abc123xyz",
+    instructions=updated_system_prompt,
+    temperature=0.05  # Even lower for more deterministic responses
+)
+
+# Delete an agent
+client.agents.delete(agent_id="asst_abc123xyz")
+```
+
+#### CI/CD Integration
+
+For GitHub Actions, add this workflow:
+
+```yaml
+# .github/workflows/deploy-agent.yml
+name: Deploy Policy Bot Agent
+
+on:
+  push:
+    paths:
+      - 'foundry/prompts/**'
+      - 'scripts/create-agent.py'
+    branches: [main]
+
+jobs:
+  deploy-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install azure-ai-projects azure-identity
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Deploy Agent
+        env:
+          AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+          AZURE_SEARCH_ENDPOINT: ${{ secrets.AZURE_SEARCH_ENDPOINT }}
+          AZURE_SEARCH_INDEX: policy-index
+          AZURE_OPENAI_DEPLOYMENT: gpt-4o
+        run: python scripts/create-agent.py
+```
 
 ---
 
