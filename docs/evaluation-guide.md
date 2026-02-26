@@ -551,6 +551,230 @@ flowchart TB
 | Low citation accuracy | Missing URL metadata | Verify index schema includes URL field |
 | Inconsistent results | High temperature | Lower temperature to 0.1 |
 
+### Deep Dive: Fixing Low Relevance with Search Index Tuning
+
+When evaluation scores show **low relevance** (below 4.0/5.0), the root cause is typically that Azure AI Search is returning poor results to the agent. Here's a comprehensive guide to diagnose and fix this issue.
+
+#### Step 1: Diagnose Search Quality
+
+Before tuning, test your search index directly to see what the agent is receiving:
+
+```bash
+# Test a query directly against your search index
+curl -X POST "https://YOUR-SEARCH-SERVICE.search.windows.net/indexes/YOUR-INDEX/docs/search?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: YOUR-QUERY-KEY" \
+  -d '{
+    "search": "what is the penalty for speeding in Ohio",
+    "queryType": "semantic",
+    "semanticConfiguration": "policy-semantic-config",
+    "top": 5,
+    "select": "title,content,url"
+  }'
+```
+
+**What to look for:**
+- Are the top 5 results actually relevant to the query?
+- Is the content field populated with readable text?
+- Are important policy terms appearing in results?
+
+#### Step 2: Tune the Search Index Schema
+
+**A. Add searchable fields for key policy terms:**
+
+```json
+{
+  "name": "policy-index",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true },
+    { "name": "title", "type": "Edm.String", "searchable": true, "analyzer": "en.microsoft" },
+    { "name": "content", "type": "Edm.String", "searchable": true, "analyzer": "en.microsoft" },
+    { "name": "url", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "section_number", "type": "Edm.String", "searchable": true, "filterable": true },
+    { "name": "chapter", "type": "Edm.String", "searchable": true, "filterable": true },
+    { "name": "effective_date", "type": "Edm.DateTimeOffset", "filterable": true, "sortable": true },
+    { "name": "content_vector", "type": "Collection(Edm.Single)", "dimensions": 1536, "vectorSearchProfile": "vector-profile" }
+  ]
+}
+```
+
+**B. Use the English Microsoft analyzer** (`en.microsoft`) instead of standard:
+- Handles legal terminology better
+- Better stemming for policy-specific terms
+- Improved handling of numbered sections (e.g., "4511.21")
+
+#### Step 3: Configure Semantic Search (Critical for Policy Content)
+
+Navigate to **Azure Portal → AI Search → Your Index → Semantic Configurations**
+
+**Create or update your semantic configuration:**
+
+```json
+{
+  "name": "policy-semantic-config",
+  "prioritizedFields": {
+    "titleField": {
+      "fieldName": "title"
+    },
+    "prioritizedContentFields": [
+      { "fieldName": "content" }
+    ],
+    "prioritizedKeywordsFields": [
+      { "fieldName": "section_number" },
+      { "fieldName": "chapter" }
+    ]
+  }
+}
+```
+
+**Key settings explained:**
+| Field | Purpose | Recommendation |
+|-------|---------|----------------|
+| `titleField` | Used for snippet extraction | Map to page/section title |
+| `prioritizedContentFields` | Main text for semantic ranking | Map to full policy text |
+| `prioritizedKeywordsFields` | Boost exact matches | Map to section numbers, chapter names |
+
+#### Step 4: Enable Hybrid Search (Vector + Keyword)
+
+Hybrid search combines vector similarity with keyword matching—essential for legal/policy content where exact terminology matters:
+
+**Update your Foundry agent's search configuration:**
+
+```json
+{
+  "data_sources": [{
+    "type": "azure_search",
+    "parameters": {
+      "endpoint": "https://YOUR-SEARCH.search.windows.net",
+      "index_name": "policy-index",
+      "query_type": "vector_semantic_hybrid",
+      "semantic_configuration": "policy-semantic-config",
+      "embedding_dependency": {
+        "type": "deployment_name",
+        "deployment_name": "text-embedding-ada-002"
+      },
+      "fields_mapping": {
+        "content_fields": ["content"],
+        "title_field": "title",
+        "url_field": "url",
+        "vector_fields": ["content_vector"]
+      },
+      "top_n_documents": 10,
+      "strictness": 3
+    }
+  }]
+}
+```
+
+**Query type options:**
+| Query Type | Use When |
+|------------|----------|
+| `simple` | Basic keyword matching only |
+| `semantic` | Semantic re-ranking without vectors |
+| `vector` | Pure vector similarity search |
+| `vector_semantic_hybrid` | **Recommended** - Best of all approaches |
+
+#### Step 5: Adjust Retrieval Parameters
+
+**A. Increase `top_n_documents` for complex queries:**
+
+```json
+"top_n_documents": 15  // Default is 5, increase for comprehensive policies
+```
+
+**B. Tune `strictness` based on your needs:**
+
+| Strictness | Behavior | Use Case |
+|------------|----------|----------|
+| 1 | Very loose - returns marginally related content | Exploratory queries |
+| 3 | Balanced - good relevance with coverage | **Recommended default** |
+| 5 | Very strict - only highly relevant results | Specific legal questions |
+
+**C. Add filters for focused retrieval:**
+
+```json
+"filter": "chapter eq 'Traffic Laws' and effective_date ge 2024-01-01"
+```
+
+#### Step 6: Re-Index with Chunking Optimization
+
+Poor relevance often comes from documents chunked incorrectly. Adjust your indexer's chunking:
+
+```json
+{
+  "name": "policy-indexer",
+  "skillsetName": "chunking-skillset",
+  "parameters": {
+    "configuration": {
+      "dataToExtract": "contentAndMetadata",
+      "parsingMode": "default"
+    }
+  }
+}
+```
+
+**Chunking skillset for policy documents:**
+
+```json
+{
+  "name": "chunking-skillset",
+  "skills": [
+    {
+      "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+      "name": "split-by-section",
+      "textSplitMode": "pages",
+      "maximumPageLength": 2000,
+      "pageOverlapLength": 200,
+      "context": "/document"
+    }
+  ]
+}
+```
+
+**Chunking recommendations for legal/policy content:**
+| Parameter | Value | Reason |
+|-----------|-------|--------|
+| `maximumPageLength` | 2000 characters | Keeps full sections together |
+| `pageOverlapLength` | 200 characters | Ensures context continuity |
+| `textSplitMode` | "pages" | Respects document structure |
+
+#### Step 7: Verify Improvements
+
+After making changes, re-run your evaluation:
+
+```python
+# Before/after comparison
+print("Before tuning:")
+print(f"  Relevance: {before_results['relevance']}")
+
+# Apply changes, re-index, wait for completion
+
+print("After tuning:")
+print(f"  Relevance: {after_results['relevance']}")
+print(f"  Improvement: {after_results['relevance'] - before_results['relevance']:.2f}")
+```
+
+#### Common Tuning Scenarios
+
+| Symptom | Diagnosis | Fix |
+|---------|-----------|-----|
+| Returns wrong policy sections | Chunks too large | Reduce `maximumPageLength` to 1500 |
+| Misses relevant content | Chunks too small | Increase to 2500 with 300 overlap |
+| Generic, unfocused results | No semantic config | Add semantic configuration |
+| Misses exact legal terms | Vector-only search | Enable hybrid search |
+| Old content returned | Stale index | Schedule regular re-indexing |
+| Missing section numbers | Not in keywords | Add to `prioritizedKeywordsFields` |
+
+#### Quick Reference: Portal Steps
+
+1. **Azure Portal** → **AI Search** → **Your search service**
+2. **Indexes** → Select your index → **Edit JSON** to update schema
+3. **Semantic configurations** → Create/edit configuration
+4. **Indexers** → Your indexer → **Reset** → **Run** to re-index
+5. **Search explorer** → Test queries to verify improvements
+
+After tuning, expect relevance scores to improve from sub-3.0 to 4.0+ within 1-2 iteration cycles.
+
 ---
 
 ## Continuous Improvement Workflow
