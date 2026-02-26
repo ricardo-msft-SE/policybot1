@@ -246,6 +246,8 @@ flowchart LR
 
 ### Step 11: Create the Policy Bot Agent
 
+> 💡 **Prefer automation?** Skip to [Option B: Programmatic Creation](#option-b-programmatic-creation-python-sdk) to create the agent using Python SDK and `scripts/create-agent.py`.
+
 1. **Navigate**: Foundry Portal → Your Project → **Agents**
 
 2. **Click**: **+ New Agent**
