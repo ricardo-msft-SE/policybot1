@@ -108,6 +108,7 @@ policybot1/
 │   ├── architecture.md          # Technical architecture with diagrams
 │   ├── deployment-guide.md      # Step-by-step deployment
 │   ├── cost-estimation.md       # Azure cost scenarios
+│   ├── evaluation-guide.md      # Measure and improve agent effectiveness
 │   └── pain-points-addressed.md # Technical solutions to challenges
 ├── infra/
 │   ├── main.bicep               # Main deployment template
@@ -133,6 +134,7 @@ policybot1/
 |----------|-------------|
 | [Architecture](docs/architecture.md) | Technical design, data flow, and component details |
 | [Deployment Guide](docs/deployment-guide.md) | Step-by-step instructions for beginners |
+| [Evaluation Guide](docs/evaluation-guide.md) | Measure agent accuracy, groundedness, and citation quality |
 | [Cost Estimation](docs/cost-estimation.md) | Azure pricing for internal (1000 users) and public scenarios |
 | [Pain Points Addressed](docs/pain-points-addressed.md) | How we solve deep search, grounding, and citations |
 
@@ -146,6 +148,30 @@ policybot1/
 | **Public Facing** | ~$2,000 - $5,000/mo | High availability, scale |
 
 📊 **Full Breakdown**: See [Cost Estimation](docs/cost-estimation.md)
+
+---
+
+## Measuring Effectiveness
+
+Policy Bot includes comprehensive evaluation capabilities to ensure accuracy:
+
+```mermaid
+flowchart LR
+    A["Deploy Agent"] --> B["Run Evaluations"]
+    B --> C{"Pass\nThresholds?"}
+    C -->|Yes| D["Monitor & Maintain"]
+    C -->|No| E["Tune & Improve"]
+    E --> B
+    D --> B
+```
+
+| Metric | Target | Purpose |
+|--------|--------|---------|
+| **Groundedness** | ≥ 4.0/5.0 | Ensure answers come only from indexed documents |
+| **Relevance** | ≥ 4.0/5.0 | Verify answers address the question |
+| **Citation Accuracy** | ≥ 80% | Confirm citations are valid and useful |
+
+📈 **Full Guide**: See [Evaluation Guide](docs/evaluation-guide.md)
 
 ---
 

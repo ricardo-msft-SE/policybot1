@@ -399,9 +399,24 @@ Common causes:
 
 ✅ **Deployment Complete!**
 
+- [Evaluation Guide](evaluation-guide.md) - **Measure and improve your agent's effectiveness**
 - [Architecture Documentation](architecture.md) - Understand how it works
 - [Cost Estimation](cost-estimation.md) - Plan your budget
 - [Pain Points Addressed](pain-points-addressed.md) - Technical deep-dive
+
+### Evaluate Your Agent
+
+After deployment, it's critical to evaluate your agent's effectiveness:
+
+1. **Run Manual Tests** - Use the Foundry chat interface with test queries
+2. **Check Groundedness** - Verify responses come only from indexed documents
+3. **Validate Citations** - Ensure every answer includes proper citations
+4. **Set Up Automated Evaluation** - Use Foundry's built-in evaluators for continuous monitoring
+
+See the [Evaluation Guide](evaluation-guide.md) for detailed instructions on measuring:
+- Groundedness (are answers from indexed documents?)
+- Relevance (do answers address the question?)
+- Citation accuracy (are citations valid and useful?)
 
 ---
 
