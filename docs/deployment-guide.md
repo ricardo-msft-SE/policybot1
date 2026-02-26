@@ -6,13 +6,40 @@ This guide is designed for beginners (100-level). Each step includes explanation
 
 ---
 
+## Quick Reference: Deployment Options
+
+| Phase | Steps | Portal UI | Programmatic | Script |
+|-------|-------|-----------|--------------|--------|
+| **Infrastructure** | 1-5 | ❌ | ✅ Bicep/CLI | `scripts/deploy.ps1` |
+| **Search Config** | 6-8 | ✅ | ✅ REST API | `scripts/configure-search.py` |
+| **Agent Creation** | 9-12 | ✅ | ✅ Python SDK | `scripts/create-agent.py` |
+
+**Full automation path:**
+```bash
+# 1. Deploy infrastructure
+./scripts/deploy.ps1
+
+# 2. Configure search index
+python scripts/configure-search.py create-all
+python scripts/configure-search.py run-indexer
+
+# 3. Create Foundry agent
+python scripts/create-agent.py create
+```
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Azure Setup](#azure-setup)
-3. [Deploy Infrastructure](#deploy-infrastructure)
-4. [Configure Azure AI Search](#configure-azure-ai-search)
-5. [Create the Foundry Agent](#create-the-foundry-agent)
+2. [Azure Setup](#azure-setup) — Steps 1-2
+3. [Deploy Infrastructure](#deploy-infrastructure) — Steps 3-5
+4. [Configure Azure AI Search](#configure-azure-ai-search) — Steps 6-8
+   - [Option A: Portal UI](#option-a-portal-ui-recommended-for-beginners)
+   - [Option B: Programmatic (REST/Python)](#option-b-programmatic-search-configuration)
+5. [Create the Foundry Agent](#create-the-foundry-agent) — Steps 9-12
+   - [Option A: Portal UI](#option-a-portal-ui-recommended-for-beginners-1)
+   - [Option B: Programmatic (Python SDK)](#option-b-programmatic-creation-python-sdk)
 6. [Test Your Agent](#test-your-agent)
 7. [Troubleshooting](#troubleshooting)
 
@@ -86,6 +113,14 @@ flowchart LR
 ```
 
 ### Step 4: Deploy with Bicep
+
+> 💡 **Prefer scripts?** Use `scripts/deploy.ps1` (PowerShell) or `scripts/deploy.sh` (Bash) for automated deployment with validation.
+> ```powershell
+> # PowerShell (includes prerequisites check, what-if preview)
+> .\scripts\deploy.ps1 -ResourceGroupName "rg-policybot" -Location "eastus2"
+> ```
+
+**Manual deployment:**
 
 ```bash
 # Set variables
@@ -407,6 +442,8 @@ See [scripts/configure-search.py](../scripts/configure-search.py) for the full i
 
 You can create the agent using either the **Portal UI** (beginner-friendly) or **Python SDK** (programmatic/CI-CD).
 
+> 💡 **Prefer automation?** Skip to [Option B: Programmatic Creation (Python SDK)](#option-b-programmatic-creation-python-sdk) or use `scripts/create-agent.py`.
+
 ### Option A: Portal UI (Recommended for Beginners)
 
 ### Step 9: Access Microsoft Foundry
@@ -499,6 +536,8 @@ flowchart LR
    - ✅ Exact quote from source
    - ✅ URL citation
    - ✅ Section reference
+
+> 💡 **Programmatic testing:** Use `python scripts/create-agent.py test --agent-id <your-agent-id>` to test via CLI.
 
 ---
 
@@ -882,6 +921,44 @@ See the [Evaluation Guide](evaluation-guide.md) for detailed instructions on mea
 ---
 
 ## Quick Reference
+
+### Full Automation (All Steps)
+
+Deploy everything programmatically:
+
+```powershell
+# Step 1: Clone repo
+git clone https://github.com/ricardo-msft-SE/policybot1.git
+cd policybot1
+
+# Step 2: Install Python dependencies
+pip install -r requirements.txt
+
+# Steps 3-5: Deploy infrastructure
+.\scripts\deploy.ps1 -ResourceGroupName "rg-policybot" -Location "eastus2"
+
+# Steps 6-8: Configure search index
+$env:AZURE_SEARCH_ENDPOINT = "https://YOUR-SEARCH.search.windows.net"
+$env:AZURE_OPENAI_ENDPOINT = "https://YOUR-OPENAI.openai.azure.com"
+python scripts/configure-search.py create-all
+python scripts/configure-search.py run-indexer
+
+# Wait for indexer to complete (check status)
+python scripts/configure-search.py status
+
+# Steps 9-12: Create and test agent
+$env:AZURE_AI_PROJECT_ENDPOINT = "https://YOUR-RESOURCE.services.ai.azure.com/api/projects/policybot"
+python scripts/create-agent.py create
+```
+
+### Scripts Summary
+
+| Script | Steps | Description |
+|--------|-------|-------------|
+| `scripts/deploy.ps1` | 3-5 | Deploy Bicep infrastructure |
+| `scripts/deploy.sh` | 3-5 | Deploy Bicep (Linux/Mac) |
+| `scripts/configure-search.py` | 6-8 | Configure index, skillset, indexer |
+| `scripts/create-agent.py` | 9-12 | Create Foundry agent |
 
 ### Resource Names
 
