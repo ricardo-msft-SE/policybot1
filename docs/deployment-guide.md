@@ -141,6 +141,16 @@ echo "Search Service: $SEARCH_NAME"
 echo "Admin Key: $SEARCH_KEY"
 ```
 
+---
+
+## Configure AI Search Index
+
+You can configure the search index using either the **Portal UI** (beginner-friendly) or **REST API/CLI** (programmatic).
+
+> 💡 **Prefer automation?** Skip to [Option B: Programmatic Search Configuration](#option-b-programmatic-search-configuration) or use the `scripts/configure-search.py` script.
+
+### Option A: Portal UI (Recommended for Beginners)
+
 ### Step 6: Configure the Web Crawler
 
 Use the Azure Portal for the easiest experience:
@@ -219,6 +229,177 @@ For better semantic understanding:
    | **Content Fields** | `content` |
 
 3. **Enable**: Set semantic search to "Free" or "Standard" tier
+
+---
+
+### Option B: Programmatic Search Configuration
+
+For automation and CI/CD, use the Azure AI Search REST API or the provided Python script.
+
+#### Prerequisites
+
+```bash
+pip install azure-search-documents azure-identity requests
+```
+
+#### Environment Variables
+
+```powershell
+$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
+$env:AZURE_SEARCH_ADMIN_KEY = "your-admin-key"  # Or use DefaultAzureCredential
+```
+
+#### Step 6B: Create Index with Vector Search via REST API
+
+```bash
+# Create the index with vector search and semantic configuration
+curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/indexes/policy-index?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: ${SEARCH_ADMIN_KEY}" \
+  -d @- << 'EOF'
+{
+  "name": "policy-index",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "retrievable": true },
+    { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": "en.microsoft" },
+    { "name": "title", "type": "Edm.String", "searchable": true, "filterable": true, "retrievable": true, "analyzer": "en.microsoft" },
+    { "name": "url", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "lastModified", "type": "Edm.DateTimeOffset", "filterable": true, "sortable": true, "retrievable": true },
+    { "name": "chunk_id", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "parent_id", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "content_vector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": false, "dimensions": 1536, "vectorSearchProfile": "vector-profile" }
+  ],
+  "vectorSearch": {
+    "algorithms": [
+      {
+        "name": "hnsw-config",
+        "kind": "hnsw",
+        "hnswParameters": { "metric": "cosine", "m": 4, "efConstruction": 400, "efSearch": 500 }
+      }
+    ],
+    "profiles": [
+      { "name": "vector-profile", "algorithmConfigurationName": "hnsw-config" }
+    ]
+  },
+  "semantic": {
+    "configurations": [
+      {
+        "name": "policy-semantic-config",
+        "prioritizedFields": {
+          "titleField": { "fieldName": "title" },
+          "prioritizedContentFields": [{ "fieldName": "content" }],
+          "prioritizedKeywordsFields": []
+        }
+      }
+    ]
+  }
+}
+EOF
+```
+
+#### Step 7B: Create Data Source (Web Crawler)
+
+```bash
+curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/datasources/policy-datasource?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: ${SEARCH_ADMIN_KEY}" \
+  -d @- << 'EOF'
+{
+  "name": "policy-datasource",
+  "type": "web",
+  "credentials": { "connectionString": null },
+  "container": {
+    "name": "https://codes.ohio.gov/ohio-revised-code",
+    "query": null
+  },
+  "dataChangeDetectionPolicy": null
+}
+EOF
+```
+
+> ⚠️ **Note**: Web crawler data sources require configuration in the Azure Portal for crawl depth and domain restrictions. Use the Indexer configuration below as a starting point.
+
+#### Step 8B: Create Indexer with Skillset
+
+```bash
+# Create a skillset for chunking and embedding
+curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/skillsets/policy-skillset?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: ${SEARCH_ADMIN_KEY}" \
+  -d @- << 'EOF'
+{
+  "name": "policy-skillset",
+  "description": "Skillset for chunking and embedding policy documents",
+  "skills": [
+    {
+      "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+      "name": "split-skill",
+      "description": "Split content into chunks",
+      "context": "/document",
+      "inputs": [{ "name": "text", "source": "/document/content" }],
+      "outputs": [{ "name": "textItems", "targetName": "chunks" }],
+      "textSplitMode": "pages",
+      "maximumPageLength": 2000,
+      "pageOverlapLength": 200
+    },
+    {
+      "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+      "name": "embedding-skill",
+      "description": "Generate embeddings",
+      "context": "/document/chunks/*",
+      "inputs": [{ "name": "text", "source": "/document/chunks/*" }],
+      "outputs": [{ "name": "embedding", "targetName": "content_vector" }],
+      "resourceUri": "https://YOUR-OPENAI.openai.azure.com",
+      "deploymentId": "text-embedding-ada-002",
+      "modelName": "text-embedding-ada-002"
+    }
+  ]
+}
+EOF
+
+# Create the indexer
+curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/indexers/policy-indexer?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: ${SEARCH_ADMIN_KEY}" \
+  -d @- << 'EOF'
+{
+  "name": "policy-indexer",
+  "dataSourceName": "policy-datasource",
+  "targetIndexName": "policy-index",
+  "skillsetName": "policy-skillset",
+  "schedule": { "interval": "P7D" },
+  "parameters": {
+    "configuration": {
+      "dataToExtract": "contentAndMetadata",
+      "parsingMode": "default"
+    }
+  },
+  "fieldMappings": [
+    { "sourceFieldName": "metadata_storage_path", "targetFieldName": "id", "mappingFunction": { "name": "base64Encode" } },
+    { "sourceFieldName": "metadata_storage_path", "targetFieldName": "url" }
+  ],
+  "outputFieldMappings": [
+    { "sourceFieldName": "/document/chunks/*/content_vector", "targetFieldName": "content_vector" }
+  ]
+}
+EOF
+```
+
+#### Using Python Script (Recommended)
+
+For a more streamlined experience, use the provided script:
+
+```powershell
+# Set environment variables
+$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
+$env:AZURE_OPENAI_ENDPOINT = "https://your-openai.openai.azure.com"
+$env:CRAWL_URL = "https://codes.ohio.gov/ohio-revised-code"
+
+# Run the configuration script
+python scripts/configure-search.py
+```
+
+See [scripts/configure-search.py](../scripts/configure-search.py) for the full implementation.
 
 ---
 

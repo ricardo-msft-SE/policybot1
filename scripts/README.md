@@ -17,7 +17,87 @@ This directory contains scripts to automate the deployment and configuration of 
 | `deploy.ps1` | PowerShell | Deploy infrastructure to Azure |
 | `deploy.sh` | Bash/Linux/Mac | Deploy infrastructure to Azure |
 | `configure-crawler.ps1` | PowerShell | Configure AI Search web crawler |
+| `configure-search.py` | Python | Configure search index, skillset, indexer |
 | `create-agent.py` | Python | Create Foundry agent programmatically |
+
+---
+
+## configure-search.py
+
+Python script to programmatically configure Azure AI Search index, data source, skillset, and indexer. Replaces manual Portal configuration (Steps 6-8 in deployment guide).
+
+### Prerequisites
+
+```bash
+pip install azure-search-documents azure-identity requests
+az login
+```
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AZURE_SEARCH_ENDPOINT` | Yes | Azure AI Search endpoint |
+| `AZURE_SEARCH_ADMIN_KEY` | No | Admin key (or use DefaultAzureCredential) |
+| `AZURE_OPENAI_ENDPOINT` | Yes | Azure OpenAI endpoint for embeddings |
+| `CRAWL_URL` | No | URL to crawl (default: `https://codes.ohio.gov/ohio-revised-code`) |
+| `AZURE_SEARCH_INDEX` | No | Index name (default: `policy-index`) |
+| `AZURE_EMBEDDING_MODEL` | No | Embedding model (default: `text-embedding-ada-002`) |
+
+### Usage
+
+```powershell
+# Set environment variables
+$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
+$env:AZURE_OPENAI_ENDPOINT = "https://your-openai.openai.azure.com"
+
+# Create all components (default action)
+python scripts/configure-search.py
+
+# Or with explicit actions
+python scripts/configure-search.py create-all      # Create index, datasource, skillset, indexer
+python scripts/configure-search.py create-index    # Create only the index
+python scripts/configure-search.py create-skillset # Create only the skillset
+python scripts/configure-search.py create-indexer  # Create only the indexer
+python scripts/configure-search.py run-indexer     # Start indexing
+python scripts/configure-search.py status          # Check indexer status
+```
+
+### Expected Output
+
+```
+✅ Configuration validated
+   Search:    https://your-search.search.windows.net
+   OpenAI:    https://your-openai.openai.azure.com
+   Index:     policy-index
+   Crawl URL: https://codes.ohio.gov/ohio-revised-code
+
+📦 Creating search index...
+✅ Index 'policy-index' created/updated successfully
+
+🌐 Creating data source...
+✅ Data source 'policy-datasource' created
+⚠️  Note: Configure crawl depth (10) in Azure Portal
+
+🧠 Creating skillset...
+✅ Skillset 'policy-skillset' created
+
+📥 Creating indexer...
+✅ Indexer 'policy-indexer' created
+
+==================================================
+✅ All components created!
+==================================================
+```
+
+### Components Created
+
+| Component | Name | Purpose |
+|-----------|------|---------|
+| Index | `policy-index` | Stores documents with vector + semantic search |
+| Data Source | `policy-datasource` | Web crawler source configuration |
+| Skillset | `policy-skillset` | Chunking + embedding pipeline |
+| Indexer | `policy-indexer` | Orchestrates crawl → chunk → embed → index |
 
 ---
 
