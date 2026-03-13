@@ -237,8 +237,9 @@ if (-not $WhatIf) {
     $StorageAccountName = "stpolicybot$(([guid]::NewGuid().ToString().Replace('-',''))[0..7] -join '')"
     $existingStorage = az storage account show --name $StorageAccountName --resource-group $ResourceGroupName --output json 2>$null | ConvertFrom-Json
     if (-not $existingStorage) {
-        # Use a deterministic name based on resource group
-        $storageSuffix = (az group show --name $ResourceGroupName --query id -o tsv | Get-FileHash -Algorithm MD5).Hash.Substring(0,8).ToLower()
+        # Use a deterministic name based on resource group name
+        $hashBytes = [System.Text.Encoding]::UTF8.GetBytes($ResourceGroupName + $SubscriptionId)
+        $storageSuffix = ([System.BitConverter]::ToString([System.Security.Cryptography.MD5]::Create().ComputeHash($hashBytes)) -replace '-','').Substring(0,8).ToLower()
         $StorageAccountName = "stpltbot$storageSuffix"
         Write-Host "   Creating storage for Foundry Hub: $StorageAccountName" -ForegroundColor Gray
         az storage account create `
