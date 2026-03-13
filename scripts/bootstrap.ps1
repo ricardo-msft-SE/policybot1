@@ -165,12 +165,12 @@ if ($WhatIf) {
 }
 
 # ============================================================================
-# 5. Deploy Models to AI Services (for Foundry agent)
+# 5. Deploy Models to AI Services (for Foundry agents)
 # ============================================================================
-Step "Deploying models to AI Services (gpt-4o + text-embedding-3-small)"
+Step "Deploying models to AI Services (gpt-4o, gpt-4o-mini, o3-mini, text-embedding-3-small)"
 
 if (-not $WhatIf) {
-    # gpt-4o for chat
+    # gpt-4o — Orchestrator, Definitions Agent, Traffic & Violations Agent
     $existingDeployment = az cognitiveservices account deployment show `
         --resource-group $ResourceGroupName `
         --name $AiServicesName `
@@ -191,6 +191,50 @@ if (-not $WhatIf) {
             --output none
         Ok "gpt-4o deployed"
     } else { Ok "gpt-4o already deployed" }
+
+    # gpt-4o-mini — Licensing & Registration Agent (lower cost for procedural queries)
+    $existingMini = az cognitiveservices account deployment show `
+        --resource-group $ResourceGroupName `
+        --name $AiServicesName `
+        --deployment-name "gpt-4o-mini" `
+        --output json 2>$null | ConvertFrom-Json
+
+    if (-not $existingMini) {
+        Write-Host "   Deploying gpt-4o-mini..." -ForegroundColor Gray
+        az cognitiveservices account deployment create `
+            --resource-group $ResourceGroupName `
+            --name $AiServicesName `
+            --deployment-name "gpt-4o-mini" `
+            --model-name "gpt-4o-mini" `
+            --model-version "2024-07-18" `
+            --model-format "OpenAI" `
+            --sku-name "GlobalStandard" `
+            --sku-capacity 30 `
+            --output none
+        Ok "gpt-4o-mini deployed"
+    } else { Ok "gpt-4o-mini already deployed" }
+
+    # o3-mini — Legal Reasoning Agent (reasoning model; temp must be 1 in Foundry)
+    $existingO3 = az cognitiveservices account deployment show `
+        --resource-group $ResourceGroupName `
+        --name $AiServicesName `
+        --deployment-name "o3-mini" `
+        --output json 2>$null | ConvertFrom-Json
+
+    if (-not $existingO3) {
+        Write-Host "   Deploying o3-mini..." -ForegroundColor Gray
+        az cognitiveservices account deployment create `
+            --resource-group $ResourceGroupName `
+            --name $AiServicesName `
+            --deployment-name "o3-mini" `
+            --model-name "o3-mini" `
+            --model-version "2025-01-31" `
+            --model-format "OpenAI" `
+            --sku-name "GlobalStandard" `
+            --sku-capacity 10 `
+            --output none
+        Ok "o3-mini deployed"
+    } else { Ok "o3-mini already deployed" }
 
     # text-embedding-3-small for vector search
     $existingEmbed = az cognitiveservices account deployment show `
@@ -315,12 +359,14 @@ Write-Host "     Embedding:  text-embedding-3-small" -ForegroundColor Gray
 Write-Host "     Index name: ohio-title45-index" -ForegroundColor Gray
 Write-Host "     Depth:      10" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  2. CREATE AGENT" -ForegroundColor White
-Write-Host "     Portal: https://ai.azure.com -> Project: $ProjectName" -ForegroundColor Gray
-
-Write-Host "     Model: gpt-4o  Temperature: 0.1" -ForegroundColor Gray
-Write-Host "     Paste system prompt from: foundry/prompts/system-prompt.md" -ForegroundColor Gray
-Write-Host "     Add knowledge: aisearch-conn / ohio-title45-index" -ForegroundColor Gray
+Write-Host "  2. CREATE AGENTS (portal: https://ai.azure.com -> Project: $ProjectName)" -ForegroundColor White
+Write-Host "     Create specialists FIRST (in this order), Orchestrator LAST:" -ForegroundColor Gray
+Write-Host "     1. definitions-agent         gpt-4o      temp=0" -ForegroundColor Gray
+Write-Host "     2. traffic-violations-agent  gpt-4o      temp=0" -ForegroundColor Gray
+Write-Host "     3. licensing-agent           gpt-4o-mini temp=0.1" -ForegroundColor Gray
+Write-Host "     4. legal-reasoning-agent     o3-mini     temp=1 (required)" -ForegroundColor Gray
+Write-Host "     5. orchestrator              gpt-4o      temp=0.1 (connect 1-4 as tools)" -ForegroundColor Gray
+Write-Host "     Prompts: foundry/prompts/*.md  |  Knowledge: aisearch-conn / ohio-title45-index" -ForegroundColor Gray
 Write-Host "     Top K: 10  Strictness: 4  In scope only: ON" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  3. TEST & DEPLOY" -ForegroundColor White

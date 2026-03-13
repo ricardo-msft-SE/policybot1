@@ -102,58 +102,136 @@ python scripts\configure-search.py create-index
 
 ---
 
-## Step 3 — Create the Foundry Agent
+## Step 3 — Create the Foundry Agents
 
-1. Go to [ai.azure.com](https://ai.azure.com)
-2. Select your project **`policybot-project`**
-3. Navigate to **Agents** → **New agent**
-4. Fill in the agent settings:
+The system uses **five agents**: four specialists and one Orchestrator. Create the specialists
+first — the Orchestrator must connect to them as tools, so they must exist first.
 
-   | Field | Value |
-   |-------|-------|
-   | Name | `ohio-title45-bot` |
-   | Model | `gpt-4o` |
-   | Temperature | `0.1` |
+> **Open:** [ai.azure.com](https://ai.azure.com) → Project **`policybot-project`** → **Agents** → **New agent**
 
-5. In the **Instructions** box, paste the full contents of
-   [`foundry/prompts/system-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/system-prompt.md)
-   (skip the first `#` heading line)
+### 3a. Definitions Agent
 
-6. Under **Knowledge** → **Add** → **Azure AI Search**, configure:
+| Field | Value |
+|-------|-------|
+| Name | `definitions-agent` |
+| Model | `gpt-4o` |
+| Temperature | `0` |
 
-   | Field | Value |
-   |-------|-------|
-   | Connection | `aisearch-conn` |
-   | Index | `ohio-title45-index` |
-   | Search type | `Hybrid (vector + keyword)` |
-   | Semantic ranker | Enabled — config: `policy-semantic-config` |
-   | Top K | `10` |
-   | Strictness | `4` |
-   | In scope only | ✅ Enabled |
+In the **Instructions** box, paste the full contents of
+[`foundry/prompts/definitions-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/definitions-agent-prompt.md).
 
-7. Click **Save**
+Under **Knowledge** → **Add** → **Azure AI Search**:
+
+| Field | Value |
+|-------|-------|
+| Connection | `aisearch-conn` |
+| Index | `ohio-title45-index` |
+| Search type | `Hybrid (vector + keyword)` |
+| Semantic ranker | Enabled — `policy-semantic-config` |
+| Top K | `10` |
+| Strictness | `4` |
+| In scope only | ✅ Enabled |
+
+Click **Save**. Copy the agent ID — you will need it for the Orchestrator.
+
+---
+
+### 3b. Traffic & Violations Agent
+
+| Field | Value |
+|-------|-------|
+| Name | `traffic-violations-agent` |
+| Model | `gpt-4o` |
+| Temperature | `0` |
+
+Paste [`foundry/prompts/traffic-violations-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/traffic-violations-agent-prompt.md)
+into the Instructions box. Apply the same Knowledge settings as Step 3a. Click **Save**.
+
+---
+
+### 3c. Licensing & Registration Agent
+
+| Field | Value |
+|-------|-------|
+| Name | `licensing-agent` |
+| Model | `gpt-4o-mini` |
+| Temperature | `0.1` |
+
+Paste [`foundry/prompts/licensing-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/licensing-agent-prompt.md)
+into the Instructions box. Apply the same Knowledge settings. Click **Save**.
+
+---
+
+### 3d. Legal Reasoning Agent
+
+| Field | Value |
+|-------|-------|
+| Name | `legal-reasoning-agent` |
+| Model | `o3-mini` |
+| Temperature | `1` ⚠️ required for reasoning models |
+| Max tokens | `8192` (reasoning uses more tokens) |
+
+Paste [`foundry/prompts/legal-reasoning-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/legal-reasoning-agent-prompt.md)
+into the Instructions box. Apply the same Knowledge settings. Click **Save**.
+
+{: .warning }
+`o3-mini` **requires temperature=1**. Setting it to 0 will cause API errors. Do not set
+`topP` or `frequencyPenalty` for o3-mini — they are not supported on reasoning models.
+
+---
+
+### 3e. Orchestrator Agent (create last)
+
+| Field | Value |
+|-------|-------|
+| Name | `orchestrator` |
+| Model | `gpt-4o` |
+| Temperature | `0.1` |
+
+Paste [`foundry/prompts/orchestrator-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/orchestrator-prompt.md)
+into the Instructions box. Apply the same Knowledge settings.
+
+**Connect the four specialists as tools:**
+
+1. Click **"Add a tool"** → **"Agent"**
+2. Select `definitions-agent` → Tool name: `definitions-agent`
+3. Repeat for `traffic-violations-agent`, `licensing-agent`, `legal-reasoning-agent`
+
+Your tool list should look like:
+
+| Tool name | Agent |
+|-----------|-------|
+| `definitions-agent` | Definitions Agent |
+| `traffic-violations-agent` | Traffic & Violations Agent |
+| `licensing-agent` | Licensing & Registration Agent |
+| `legal-reasoning-agent` | Legal Reasoning Agent |
+
+Click **Save**.
 
 ---
 
 ## Step 4 — Test in the Playground
 
-1. In the Foundry portal, open your agent and click **"Try in playground"**
-2. Test with these sample questions:
+Open the **`orchestrator`** agent and click **"Try in playground"**.
+Test with these sample questions:
 
-   | Question | Expected behavior |
-   |----------|------------------|
-   | *"What is the legal definition of a vehicle in Ohio?"* | Quote from ORC 4501.01 with URL |
-   | *"What are the penalties for OVI (drunk driving)?"* | Quote from ORC 4511.19 with URL |
-   | *"What is the capital of France?"* | Scope refusal message |
-   | *"What does Title 1 of the ORC say?"* | Out-of-scope refusal message |
+| Question | Expected routing + behavior |
+|----------|-----------------------------|
+| *"What is the legal definition of a vehicle in Ohio?"* | → Definitions Agent → verbatim ORC § 4501.01 quote |
+| *"What are the penalties for OVI (drunk driving)?"* | → Traffic & Violations Agent → penalty table from ORC § 4511.19 |
+| *"How do I renew my driver's license in Ohio?"* | → Licensing Agent → numbered steps with ORC § 4507.x citations |
+| *"My license expired 2 weeks ago. Am I still allowed to drive to the BMV to renew?"* | → Legal Reasoning Agent → step-by-step analysis + conclusion + disclaimer |
+| *"What is the capital of France?"* | Orchestrator scope refusal — no routing |
+| *"What does Title 1 of the ORC say?"* | Orchestrator out-of-scope refusal |
 
-**Signs the agent is configured correctly:**
+**Signs the multi-agent system is configured correctly:**
+- ✅ The Orchestrator invokes a specialist tool (visible in the "activity" or "trace" panel)
 - ✅ Responses include exact quotes and `codes.ohio.gov` source URLs
-- ✅ Off-topic questions are declined with the configured refusal message
-- ✅ Answers for questions outside the indexed content say "I couldn't find"
+- ✅ Off-topic questions are declined without routing to any specialist
+- ✅ o3-mini responses include a visible reasoning chain before the conclusion
 
-If answers are drawing on general knowledge (no citations), increase **Strictness** or verify
-the `In scope only` toggle is enabled.
+If the Orchestrator answers directly without calling a tool, verify the connected agents are
+added and the orchestrator system prompt is fully pasted.
 
 ---
 
@@ -198,3 +276,6 @@ If weekly scheduling is configured in Step 2, this happens automatically.
 | `bootstrap.ps1` fails at model deployment | TPM quota limit | Reduce capacity or switch `Location` to another region |
 | Agent not found in Foundry portal | Wrong project selected | Ensure `policybot-project` is selected |
 | `az ml workspace create` fails on hub-less | Old az ml extension | Run `az extension update --name ml` |
+| Orchestrator answers without calling a tool | Specialists not connected | Re-add connected agents in Orchestrator config |
+| `o3-mini` returns API error about temperature | Temperature not set to 1 | Set temperature=1; remove `topP` and `frequencyPenalty` |
+| Legal Reasoning Agent gives no answer | Max tokens too low for reasoning | Set max tokens to 8192 or higher |

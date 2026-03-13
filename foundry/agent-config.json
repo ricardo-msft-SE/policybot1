@@ -1,42 +1,29 @@
 {
-  "$schema": "https://schema.ai.azure.com/agents/v1/agent.json",
-  "name": "policy-bot",
-  "displayName": "Policy Bot",
-  "description": "AI-powered assistant for government policy research with grounded answers and reliable citations",
-  "version": "1.0.0",
-  "type": "prompt",
-  "configuration": {
-    "model": {
-      "provider": "azure-openai",
-      "deployment": "gpt-4o",
-      "parameters": {
-        "temperature": 0.1,
-        "topP": 0.95,
-        "maxTokens": 4096,
-        "frequencyPenalty": 0,
-        "presencePenalty": 0
-      }
-    },
-    "systemPrompt": {
-      "file": "prompts/system-prompt.md"
-    },
-    "knowledge": {
-      "sources": [
-        {
-          "type": "azure-ai-search",
-          "name": "ohio-revised-code",
-          "description": "Ohio Revised Code and government policy documents",
-          "configuration": {
-            "indexName": "policy-index",
-            "semanticConfiguration": "policy-semantic-config",
-            "queryType": "hybrid",
-            "topK": 5,
-            "strictness": 3,
-            "inScope": true
-          }
+  "$schema": "https://schema.ai.azure.com/agents/v1/multi-agent.json",
+  "version": "2.0.0",
+  "description": "Multi-agent configuration for Ohio ORC Title 45 Policy Bot. Five specialized agents with an Orchestrator entry point. Configure agents in Foundry portal in the order listed — specialists first, Orchestrator last.",
+  "metadata": {
+    "author": "Policy Bot Team",
+    "repository": "https://github.com/ricardo-msft-SE/policybot1",
+    "documentation": "https://ricardo-msft-SE.github.io/policybot1/architecture",
+    "tags": ["government", "policy", "legal", "ohio", "rag", "grounded", "multi-agent"]
+  },
+  "sharedKnowledge": {
+    "sources": [
+      {
+        "type": "azure-ai-search",
+        "name": "ohio-revised-code",
+        "description": "Full text of Ohio Revised Code Title 45 (Motor Vehicles), crawled from codes.ohio.gov",
+        "configuration": {
+          "indexName": "ohio-title45-index",
+          "semanticConfiguration": "policy-semantic-config",
+          "queryType": "vector_semantic_hybrid",
+          "topK": 10,
+          "strictness": 4,
+          "inScope": true
         }
-      ]
-    },
+      }
+    ],
     "grounding": {
       "enabled": true,
       "strictMode": true,
@@ -46,29 +33,129 @@
         "includeUrl": true,
         "includeQuotes": true
       }
-    },
-    "safety": {
-      "contentFiltering": "default",
-      "blockedTopics": [],
-      "customBlocklist": []
     }
   },
-  "capabilities": {
-    "multiTurn": true,
-    "contextWindow": 128000,
-    "streamingEnabled": true
-  },
-  "metadata": {
-    "author": "Policy Bot Team",
-    "repository": "https://github.com/ricardo-msft-SE/policybot1",
-    "documentation": "https://github.com/ricardo-msft-SE/policybot1/blob/main/README.md",
-    "tags": [
-      "government",
-      "policy",
-      "legal",
-      "ohio",
-      "rag",
-      "grounded"
-    ]
-  }
+  "agents": [
+    {
+      "name": "definitions-agent",
+      "displayName": "Ohio ORC Definitions Specialist",
+      "role": "specialist",
+      "description": "Retrieves and returns verbatim statutory definitions from ORC Title 45 — primarily Chapter 4501. Do NOT paraphrase. Temperature=0 for deterministic output.",
+      "model": {
+        "provider": "azure-openai",
+        "deployment": "gpt-4o",
+        "parameters": {
+          "temperature": 0,
+          "topP": 1.0,
+          "maxTokens": 2048
+        }
+      },
+      "systemPrompt": {
+        "file": "prompts/definitions-agent-prompt.md"
+      },
+      "knowledge": { "$ref": "#/sharedKnowledge" }
+    },
+    {
+      "name": "traffic-violations-agent",
+      "displayName": "Ohio ORC Traffic & Violations Specialist",
+      "role": "specialist",
+      "description": "Answers questions about traffic laws, OVI, penalties, fines, and license suspensions under ORC Chapter 4511. Temperature=0 for deterministic penalty reporting.",
+      "model": {
+        "provider": "azure-openai",
+        "deployment": "gpt-4o",
+        "parameters": {
+          "temperature": 0,
+          "topP": 1.0,
+          "maxTokens": 2048
+        }
+      },
+      "systemPrompt": {
+        "file": "prompts/traffic-violations-agent-prompt.md"
+      },
+      "knowledge": { "$ref": "#/sharedKnowledge" }
+    },
+    {
+      "name": "licensing-agent",
+      "displayName": "Ohio ORC Licensing & Registration Specialist",
+      "role": "specialist",
+      "description": "Handles procedural questions about vehicle registration (Chapter 4503) and driver licensing (Chapter 4507). Uses gpt-4o-mini for cost efficiency on high-volume procedural queries.",
+      "model": {
+        "provider": "azure-openai",
+        "deployment": "gpt-4o-mini",
+        "parameters": {
+          "temperature": 0.1,
+          "topP": 0.95,
+          "maxTokens": 2048
+        }
+      },
+      "systemPrompt": {
+        "file": "prompts/licensing-agent-prompt.md"
+      },
+      "knowledge": { "$ref": "#/sharedKnowledge" }
+    },
+    {
+      "name": "legal-reasoning-agent",
+      "displayName": "Ohio ORC Legal Reasoning Specialist",
+      "role": "specialist",
+      "description": "Handles complex multi-section analysis and conditional legal questions across ORC Title 45. Uses o3-mini reasoning model. Temperature MUST be 1 (required for reasoning models).",
+      "model": {
+        "provider": "azure-openai",
+        "deployment": "o3-mini",
+        "parameters": {
+          "temperature": 1,
+          "maxTokens": 8192
+        }
+      },
+      "systemPrompt": {
+        "file": "prompts/legal-reasoning-agent-prompt.md"
+      },
+      "knowledge": { "$ref": "#/sharedKnowledge" }
+    },
+    {
+      "name": "orchestrator",
+      "displayName": "Ohio ORC Title 45 Orchestrator",
+      "role": "orchestrator",
+      "description": "Primary entry point. Classifies user questions and routes to the appropriate specialist agent. Synthesizes specialist responses into a final reply. Create this agent LAST in the portal — it must connect to the four specialists as tools.",
+      "model": {
+        "provider": "azure-openai",
+        "deployment": "gpt-4o",
+        "parameters": {
+          "temperature": 0.1,
+          "topP": 0.95,
+          "maxTokens": 4096
+        }
+      },
+      "systemPrompt": {
+        "file": "prompts/orchestrator-prompt.md"
+      },
+      "connectedAgents": [
+        {
+          "agentName": "definitions-agent",
+          "toolName": "definitions-agent",
+          "description": "Look up a verbatim statutory definition from ORC Title 45"
+        },
+        {
+          "agentName": "traffic-violations-agent",
+          "toolName": "traffic-violations-agent",
+          "description": "Answer questions about traffic violations, OVI, penalties, fines, or license suspension"
+        },
+        {
+          "agentName": "licensing-agent",
+          "toolName": "licensing-agent",
+          "description": "Answer procedural questions about vehicle registration or driver licensing"
+        },
+        {
+          "agentName": "legal-reasoning-agent",
+          "toolName": "legal-reasoning-agent",
+          "description": "Reason through complex multi-section or conditional legal questions"
+        }
+      ],
+      "knowledge": { "$ref": "#/sharedKnowledge" },
+      "capabilities": {
+        "multiTurn": true,
+        "contextWindow": 128000,
+        "streamingEnabled": true
+      }
+    }
+  ]
 }
