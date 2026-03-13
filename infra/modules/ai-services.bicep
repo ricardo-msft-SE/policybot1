@@ -32,10 +32,6 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = 
     networkAcls: {
       defaultAction: 'Allow'
     }
-    // API properties
-    apiProperties: {
-      statisticsEnabled: false
-    }
     // Disable local authentication for enhanced security (optional)
     disableLocalAuth: false
   }
