@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1280" height="760" viewBox="0 0 1280 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Foundry Workflow End-to-End Sequence</title>
+  <desc id="desc">Static sequence diagram showing user request flow through scope guard, classifier, router, specialist, synthesis, and telemetry.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .lane { stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 6 6; }
+      .head { fill: #f8fafc; stroke: #334155; stroke-width: 2; rx: 8; ry: 8; }
+      .headText { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; fill: #0f172a; font-weight: 600; }
+      .msg { stroke: #334155; stroke-width: 2.2; marker-end: url(#arrow); fill: none; }
+      .ret { stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 5 5; marker-end: url(#arrow2); fill: none; }
+      .label { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; fill: #1e293b; }
+      .note { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 1.5; rx: 6; ry: 6; }
+      .alt { fill: #fefce8; stroke: #a16207; stroke-width: 1.5; rx: 8; ry: 8; }
+      .altText { font-family: Segoe UI, Arial, sans-serif; font-size: 13px; fill: #713f12; font-weight: 700; }
+      .small { font-family: Segoe UI, Arial, sans-serif; font-size: 13px; fill: #334155; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="760"/>
+
+  <!-- Heads -->
+  <rect class="head" x="40" y="20" width="130" height="42"/><text class="headText" x="105" y="46" text-anchor="middle">User</text>
+  <rect class="head" x="220" y="20" width="160" height="42"/><text class="headText" x="300" y="46" text-anchor="middle">Foundry Workflow</text>
+  <rect class="head" x="430" y="20" width="140" height="42"/><text class="headText" x="500" y="46" text-anchor="middle">Scope Guard</text>
+  <rect class="head" x="610" y="20" width="140" height="42"/><text class="headText" x="680" y="46" text-anchor="middle">Classifier</text>
+  <rect class="head" x="790" y="20" width="130" height="42"/><text class="headText" x="855" y="46" text-anchor="middle">Router</text>
+  <rect class="head" x="960" y="20" width="150" height="42"/><text class="headText" x="1035" y="46" text-anchor="middle">Specialist</text>
+  <rect class="head" x="1140" y="20" width="120" height="42"/><text class="headText" x="1200" y="46" text-anchor="middle">Synthesis</text>
+
+  <!-- Lifelines -->
+  <line class="lane" x1="105" y1="70" x2="105" y2="730"/>
+  <line class="lane" x1="300" y1="70" x2="300" y2="730"/>
+  <line class="lane" x1="500" y1="70" x2="500" y2="730"/>
+  <line class="lane" x1="680" y1="70" x2="680" y2="730"/>
+  <line class="lane" x1="855" y1="70" x2="855" y2="730"/>
+  <line class="lane" x1="1035" y1="70" x2="1035" y2="730"/>
+  <line class="lane" x1="1200" y1="70" x2="1200" y2="730"/>
+
+  <!-- Messages -->
+  <path class="msg" d="M105 110 L300 110"/><text class="label" x="195" y="102" text-anchor="middle">Ask question</text>
+  <path class="msg" d="M300 150 L500 150"/><text class="label" x="400" y="142" text-anchor="middle">Validate Title 45 scope</text>
+  <path class="ret" d="M500 185 L300 185"/><text class="label" x="400" y="177" text-anchor="middle">in_scope / out_of_scope</text>
+
+  <rect class="alt" x="250" y="215" width="980" height="90"/>
+  <text class="altText" x="270" y="238">alt out_of_scope</text>
+  <path class="msg" d="M300 265 L105 265"/><text class="label" x="205" y="257" text-anchor="middle">Scope refusal response</text>
+
+  <rect class="alt" x="250" y="325" width="980" height="340"/>
+  <text class="altText" x="270" y="348">else in_scope</text>
+
+  <path class="msg" d="M300 385 L680 385"/><text class="label" x="490" y="377" text-anchor="middle">Classify intent</text>
+  <path class="ret" d="M680 420 L855 420"/><text class="label" x="768" y="412" text-anchor="middle">label + confidence</text>
+  <path class="msg" d="M855 455 L1035 455"/><text class="label" x="945" y="447" text-anchor="middle">Invoke selected specialist</text>
+  <path class="ret" d="M1035 490 L1200 490"/><text class="label" x="1118" y="482" text-anchor="middle">Grounded answer + citations</text>
+
+  <rect class="note" x="1110" y="520" width="155" height="56"/>
+  <text class="small" x="1188" y="543" text-anchor="middle">Emit route, latency,</text>
+  <text class="small" x="1188" y="562" text-anchor="middle">citation metrics</text>
+
+  <path class="msg" d="M1200 605 L105 605"/><text class="label" x="650" y="597" text-anchor="middle">Final response</text>
+</svg>

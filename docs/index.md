@@ -65,6 +65,7 @@ Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for the 
 | Page | Contents |
 |------|---------|
 | [Architecture]({{ site.baseurl }}/architecture) | Component design, data flow, infrastructure layout |
+| [Workflow Architecture (Alternative)]({{ site.baseurl }}/workflow-architecture-alternative) | Foundry Workflow-based orchestration patterns, routing variants, and visual diagrams |
 | [Deployment Guide]({{ site.baseurl }}/deployment-guide) | Step-by-step portal walkthrough |
 | [Configuration Reference]({{ site.baseurl }}/configuration) | All tuneable settings |
 | [Evaluation Guide]({{ site.baseurl }}/evaluation-guide) | Testing accuracy and groundedness |

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1200" height="760" viewBox="0 0 1200 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Policy Bot Workflow Decision Tree</title>
+  <desc id="desc">A static decision tree showing scope check, intent confidence, and specialist routing.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .node { fill: #f8fafc; stroke: #334155; stroke-width: 2; rx: 10; ry: 10; }
+      .decision { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2; }
+      .terminal { fill: #f0fdf4; stroke: #15803d; stroke-width: 2; }
+      .fallback { fill: #fef2f2; stroke: #b91c1c; stroke-width: 2; }
+      .label { font-family: Segoe UI, Arial, sans-serif; font-size: 18px; fill: #0f172a; font-weight: 600; }
+      .small { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; fill: #1e293b; }
+      .edge { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .yesno { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; fill: #334155; font-weight: 700; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="760" />
+
+  <rect class="node" x="470" y="30" width="260" height="62" />
+  <text class="label" x="600" y="68" text-anchor="middle">User Question</text>
+
+  <polygon class="decision" points="600,125 730,190 600,255 470,190" />
+  <text class="label" x="600" y="185" text-anchor="middle">In Title 45 Scope?</text>
+
+  <rect class="fallback" x="860" y="155" width="270" height="70" rx="10" ry="10"/>
+  <text class="label" x="995" y="182" text-anchor="middle">Out-of-Scope Refusal</text>
+  <text class="small" x="995" y="203" text-anchor="middle">Return policy-limited response</text>
+
+  <rect class="node" x="470" y="295" width="260" height="68" />
+  <text class="label" x="600" y="324" text-anchor="middle">Intent Classifier</text>
+  <text class="small" x="600" y="347" text-anchor="middle">Output: label + confidence</text>
+
+  <polygon class="decision" points="600,390 745,455 600,520 455,455" />
+  <text class="label" x="600" y="449" text-anchor="middle">Confidence ≥ Threshold?</text>
+
+  <rect class="fallback" x="840" y="420" width="315" height="78" rx="10" ry="10"/>
+  <text class="label" x="998" y="450" text-anchor="middle">Fallback Route</text>
+  <text class="small" x="998" y="474" text-anchor="middle">Invoke legal-reasoning-agent</text>
+
+  <rect class="terminal" x="75" y="585" width="240" height="80" rx="10" ry="10"/>
+  <text class="label" x="195" y="615" text-anchor="middle">definitions-agent</text>
+  <text class="small" x="195" y="640" text-anchor="middle">Definition lookup</text>
+
+  <rect class="terminal" x="345" y="585" width="240" height="80" rx="10" ry="10"/>
+  <text class="label" x="465" y="615" text-anchor="middle">traffic-violations</text>
+  <text class="small" x="465" y="640" text-anchor="middle">Penalties / OVI / fines</text>
+
+  <rect class="terminal" x="615" y="585" width="240" height="80" rx="10" ry="10"/>
+  <text class="label" x="735" y="615" text-anchor="middle">licensing-agent</text>
+  <text class="small" x="735" y="640" text-anchor="middle">Registration / licensing</text>
+
+  <rect class="terminal" x="885" y="585" width="240" height="80" rx="10" ry="10"/>
+  <text class="label" x="1005" y="615" text-anchor="middle">legal-reasoning</text>
+  <text class="small" x="1005" y="640" text-anchor="middle">Conditional interpretation</text>
+
+  <rect class="node" x="430" y="695" width="340" height="50" />
+  <text class="small" x="600" y="725" text-anchor="middle">Synthesis + citation checks + telemetry</text>
+
+  <path class="edge" d="M600 92 L600 120" />
+  <path class="edge" d="M730 190 L858 190" />
+  <text class="yesno" x="790" y="178">No</text>
+
+  <path class="edge" d="M600 255 L600 292" />
+  <text class="yesno" x="612" y="278">Yes</text>
+
+  <path class="edge" d="M600 363 L600 385" />
+  <path class="edge" d="M745 455 L838 455" />
+  <text class="yesno" x="790" y="442">No</text>
+
+  <path class="edge" d="M600 520 L600 550" />
+  <text class="yesno" x="612" y="538">Yes</text>
+
+  <path class="edge" d="M600 550 L195 585" />
+  <path class="edge" d="M600 550 L465 585" />
+  <path class="edge" d="M600 550 L735 585" />
+  <path class="edge" d="M600 550 L1005 585" />
+
+  <path class="edge" d="M195 665 L500 695" />
+  <path class="edge" d="M465 665 L560 695" />
+  <path class="edge" d="M735 665 L640 695" />
+  <path class="edge" d="M1005 665 L700 695" />
+  <path class="edge" d="M998 498 L770 695" />
+
+</svg>
