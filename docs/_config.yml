@@ -3,10 +3,9 @@ description: "AI-powered chatbot for Ohio Revised Code Title 45 (Motor Vehicles)
 baseurl: "/policybot1"
 url: "https://ricardo-msft-SE.github.io"
 
-remote_theme: just-the-docs/just-the-docs
+theme: just-the-docs
 
 plugins:
-  - jekyll-remote-theme
   - jekyll-seo-tag
 
 # Theme settings
