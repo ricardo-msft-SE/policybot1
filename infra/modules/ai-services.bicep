@@ -51,4 +51,4 @@ output resourceId string = aiServices.id
 output endpoint string = aiServices.properties.endpoint
 
 @description('The principal ID for managed identity (if system-assigned)')
-output principalId string = aiServices.identity.?principalId ?? ''
+output principalId string = ''
