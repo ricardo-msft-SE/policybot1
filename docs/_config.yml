@@ -9,7 +9,6 @@ plugins:
   - jekyll-seo-tag
 
 # Theme settings
-color_scheme: default
 heading_anchors: true
 search_enabled: true
 nav_enabled: true
