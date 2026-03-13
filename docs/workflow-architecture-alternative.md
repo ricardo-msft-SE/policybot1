@@ -65,11 +65,11 @@ flowchart LR
 ```mermaid
 flowchart TD
     A[Start: User Question] --> B{Title 45 Scope Check}
-    B -- No --> B1[Refusal Template\nOut-of-scope response]
-    B -- Yes --> C[Intent Classification\nLabel + Confidence]
+  B -- No --> B1[Refusal Template - Out-of-scope response]
+  B -- Yes --> C[Intent Classification - Label and Confidence]
 
-    C --> D{Confidence >= threshold?}
-    D -- No --> R[Route to legal-reasoning-agent\nFallback for ambiguity]
+  C --> D{Confidence meets threshold?}
+  D -- No --> R[Route to legal-reasoning-agent - Fallback for ambiguity]
     D -- Yes --> E{Intent Label}
 
     E -- definition --> D1[Invoke definitions-agent]
@@ -83,8 +83,8 @@ flowchart TD
     D4 --> S
 
     S --> Q{Citations present?}
-    Q -- No --> Q1[Return grounded\n"I couldn't find" response]
-    Q -- Yes --> M[Telemetry\nroute, confidence, latency]
+    Q -- No --> Q1[Return grounded not-found response]
+    Q -- Yes --> M[Telemetry - route confidence latency]
 
     B1 --> Z[Return]
     Q1 --> Z
