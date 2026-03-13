@@ -1,22 +1,11 @@
 # Policy Bot Python Dependencies
-# 
 # Install with: pip install -r requirements.txt
+# Note: most setup is done via the Azure portal; Python is only needed
+# for the scripted alternatives (configure-search.py, configure-crawler.ps1).
 
-# Azure AI Projects SDK - For programmatic agent creation
-azure-ai-projects>=1.0.0
-
-# Azure AI Search - For search index configuration
+# Azure SDK
 azure-search-documents>=11.4.0
-
-# Azure Identity - For authentication (DefaultAzureCredential)
 azure-identity>=1.15.0
 
-# Azure AI Evaluation - For agent evaluation
-azure-ai-evaluation>=1.0.0
-
-# HTTP requests - For REST API calls
+# Utilities
 requests>=2.31.0
-
-# Optional: For running evaluations
-openai>=1.0.0
-pandas>=2.0.0

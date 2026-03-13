@@ -1,0 +1,36 @@
+title: "Ohio ORC Title 45 Policy Bot"
+description: "AI-powered chatbot for Ohio Revised Code Title 45 (Motor Vehicles), powered by Microsoft Azure AI Foundry"
+baseurl: "/policybot1"
+url: "https://ricardo-msft-SE.github.io"
+
+remote_theme: just-the-docs/just-the-docs
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+# Theme settings
+color_scheme: default
+heading_anchors: true
+search_enabled: true
+nav_enabled: true
+
+# Header
+aux_links:
+  "GitHub":
+    - "https://github.com/ricardo-msft-SE/policybot1"
+aux_links_new_tab: true
+
+# Footer
+footer_content: >-
+  Built on <a href="https://ai.azure.com">Microsoft Azure AI Foundry</a> &middot;
+  Source: <a href="https://codes.ohio.gov/ohio-revised-code/title-45">Ohio Revised Code Title 45</a>
+
+# Mermaid diagrams
+mermaid:
+  version: "10"
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock

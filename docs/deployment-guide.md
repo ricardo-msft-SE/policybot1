@@ -1,982 +1,199 @@
+---
+layout: default
+title: Deployment Guide
+nav_order: 3
+---
+
 # Deployment Guide
+{: .no_toc }
 
-> Step-by-step instructions for deploying Policy Bot to Azure
+Portal-first approach. After the infrastructure script runs (~10 min), the remaining
+steps are portal clicks — no SDK code required.
 
-This guide is designed for beginners (100-level). Each step includes explanations and verification commands.
+## Table of contents
+{: .no_toc .text-delta }
 
----
-
-## Quick Reference: Deployment Options
-
-| Phase | Steps | Portal UI | Programmatic | Script |
-|-------|-------|-----------|--------------|--------|
-| **Infrastructure** | 1-5 | ❌ | ✅ Bicep/CLI | `scripts/deploy.ps1` |
-| **Search Config** | 6-8 | ✅ | ✅ REST API | `scripts/configure-search.py` |
-| **Agent Creation** | 9-12 | ✅ | ✅ Python SDK | `scripts/create-agent.py` |
-
-**Full automation path:**
-```bash
-# 1. Deploy infrastructure
-./scripts/deploy.ps1
-
-# 2. Configure search index
-python scripts/configure-search.py create-all
-python scripts/configure-search.py run-indexer
-
-# 3. Create Foundry agent
-python scripts/create-agent.py create
-```
-
----
-
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Azure Setup](#azure-setup) — Steps 1-2
-3. [Deploy Infrastructure](#deploy-infrastructure) — Steps 3-5
-4. [Configure Azure AI Search](#configure-azure-ai-search) — Steps 6-8
-   - [Option A: Portal UI](#option-a-portal-ui-recommended-for-beginners)
-   - [Option B: Programmatic (REST/Python)](#option-b-programmatic-search-configuration)
-5. [Create the Foundry Agent](#create-the-foundry-agent) — Steps 9-12
-   - [Option A: Portal UI](#option-a-portal-ui-recommended-for-beginners-1)
-   - [Option B: Programmatic (Python SDK)](#option-b-programmatic-creation-python-sdk)
-6. [Test Your Agent](#test-your-agent)
-7. [Troubleshooting](#troubleshooting)
+1. TOC
+{:toc}
 
 ---
 
 ## Prerequisites
 
-Before starting, ensure you have:
-
-| Requirement | How to Verify | Installation |
-|-------------|---------------|--------------|
-| **Azure Subscription** | Access [Azure Portal](https://portal.azure.com) | [Create free account](https://azure.microsoft.com/free/) |
-| **Azure CLI** | `az --version` | [Install guide](https://docs.microsoft.com/cli/azure/install-azure-cli) |
-| **Git** | `git --version` | [Download Git](https://git-scm.com/downloads) |
-| **Contributor Role** | `az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv)` | Contact Azure admin |
+| Requirement | How to Verify |
+|-------------|---------------|
+| Azure subscription (Contributor role) | `az account show` |
+| Azure CLI installed | `az --version` |
+| PowerShell 7+ | `$PSVersionTable.PSVersion` |
+| Subscription ID | `ee0073ce-de38-45ed-a940-4dbfd9435dc1` |
 
 ---
 
-## Azure Setup
+## Step 1 — Deploy Azure Infrastructure
 
-### Step 1: Clone the Repository
+This is the only automated step. It deploys all Azure resources and creates the Foundry Hub
+and Project.
 
-```bash
-# Clone Policy Bot repository
+```powershell
+# From the repo root
 git clone https://github.com/ricardo-msft-SE/policybot1.git
 cd policybot1
-```
 
-### Step 2: Login to Azure
-
-```bash
-# Interactive login
 az login
-
-# Set your subscription (if you have multiple)
-az account list --output table
-az account set --subscription "Your Subscription Name"
-
-# Verify
-az account show --query name -o tsv
+.\scripts\bootstrap.ps1
 ```
 
-### Step 3: Register Required Providers
+What `bootstrap.ps1` creates:
 
-Azure requires certain resource providers to be registered before use:
+- Resource group `rg-policybot` in `eastus2`
+- Azure AI Services with `gpt-4o` and `text-embedding-3-small` deployments
+- Azure AI Search (Basic SKU)
+- Application Insights + Log Analytics workspace
+- Foundry Hub (`policybot-hub`) and Project (`policybot-project`)
+- AI Services connection (`aiservices-conn`) and AI Search connection (`aisearch-conn`) in the Hub
 
-```bash
-# Register required providers
-az provider register --namespace Microsoft.Search
-az provider register --namespace Microsoft.CognitiveServices
-az provider register --namespace Microsoft.Web
-az provider register --namespace Microsoft.Insights
+When it finishes, the script prints a **configuration summary** with endpoints — keep this
+window open for the next steps.
 
-# Verify registration (may take 1-2 minutes)
-az provider show --namespace Microsoft.Search --query "registrationState" -o tsv
-# Should output: Registered
-```
+{: .note }
+To skip infrastructure if already deployed: `.\scripts\bootstrap.ps1 -SkipInfra`
 
 ---
 
-## Deploy Infrastructure
+## Step 2 — Index Ohio Revised Code Title 45
 
-### Deployment Flow
+Use the Azure AI Search portal wizard to crawl and vectorize Title 45. No scraper code needed.
 
-```mermaid
-flowchart LR
-    A["1. Run Bicep\nDeployment"] --> B["2. Resources\nCreated"]
-    B --> C["3. Configure\nAI Search"]
-    C --> D["4. Create\nFoundry Agent"]
-    D --> E["5. Test &\nValidate"]
-```
-
-### Step 4: Deploy with Bicep
-
-> 💡 **Prefer scripts?** Use `scripts/deploy.ps1` (PowerShell) or `scripts/deploy.sh` (Bash) for automated deployment with validation.
-> ```powershell
-> # PowerShell (includes prerequisites check, what-if preview)
-> .\scripts\deploy.ps1 -ResourceGroupName "rg-policybot" -Location "eastus2"
-> ```
-
-**Manual deployment:**
-
-```bash
-# Set variables
-RESOURCE_GROUP="rg-policybot"
-LOCATION="eastus2"  # Choose: eastus, eastus2, westus2, westeurope
-
-# Create resource group
-az group create --name $RESOURCE_GROUP --location $LOCATION
-
-# Deploy infrastructure
-az deployment group create \
-  --resource-group $RESOURCE_GROUP \
-  --template-file infra/main.bicep \
-  --parameters location=$LOCATION
-
-# Verify deployment
-az resource list --resource-group $RESOURCE_GROUP --output table
-```
-
-**Expected Output:**
-
-| Name | Type | Location |
-|------|------|----------|
-| search-policybot-xxx | Microsoft.Search/searchServices | eastus2 |
-| aoai-policybot-xxx | Microsoft.CognitiveServices/accounts | eastus2 |
-| appi-policybot-xxx | Microsoft.Insights/components | eastus2 |
-
-### Alternative: One-Click Deploy
-
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fricardo-msft-SE%2Fpolicybot1%2Fmain%2Finfra%2Fmain.json)
-
----
-
-## Configure Azure AI Search
-
-### Step 5: Create the Search Index
-
-Navigate to Azure Portal → Your Search Service → **Indexes** → **Add index**
-
-Or use the CLI:
-
-```bash
-# Get search service name
-SEARCH_NAME=$(az search service list -g $RESOURCE_GROUP --query "[0].name" -o tsv)
-
-# Get admin key
-SEARCH_KEY=$(az search admin-key show \
-  --resource-group $RESOURCE_GROUP \
-  --service-name $SEARCH_NAME \
-  --query "primaryKey" -o tsv)
-
-echo "Search Service: $SEARCH_NAME"
-echo "Admin Key: $SEARCH_KEY"
-```
-
----
-
-## Configure AI Search Index
-
-You can configure the search index using either the **Portal UI** (beginner-friendly) or **REST API/CLI** (programmatic).
-
-> 💡 **Prefer automation?** Skip to [Option B: Programmatic Search Configuration](#option-b-programmatic-search-configuration) or use the `scripts/configure-search.py` script.
-
-### Option A: Portal UI (Recommended for Beginners)
-
-### Step 6: Configure the Web Crawler
-
-Use the Azure Portal for the easiest experience:
-
-1. **Navigate**: Azure Portal → AI Search → Your Service → **Data Sources**
-
-2. **Add Data Source**:
-   
-   ```mermaid
-   flowchart TB
-       A["Click 'Import Data'"] --> B["Select 'Web content'"]
-       B --> C["Enter Configuration"]
-       C --> D["Create Index"]
-       D --> E["Create Indexer"]
+1. Open [portal.azure.com](https://portal.azure.com) and navigate to your **AI Search** resource (`search-policybot-*`)
+2. Click **"Import and vectorize data"**
+3. **Data source**: Select **Web** → enter seed URL:
    ```
-
-3. **Configuration Values**:
-
-   | Field | Value | Notes |
-   |-------|-------|-------|
-   | **Seed URL** | `https://codes.ohio.gov/ohio-revised-code` | Starting point |
-   | **Crawl Depth** | `10` | Captures 5+ levels |
-   | **Restrict to Path** | `codes.ohio.gov/*` | Stay on domain |
-   | **Crawl Schedule** | Weekly | Keep content fresh |
-
-4. **Index Schema** (create these fields):
-
-   | Field Name | Type | Searchable | Filterable | Retrievable |
-   |-----------|------|------------|------------|-------------|
-   | `id` | Edm.String | ❌ | ❌ | ✅ |
-   | `content` | Edm.String | ✅ | ❌ | ✅ |
-   | `url` | Edm.String | ❌ | ✅ | ✅ |
-   | `title` | Edm.String | ✅ | ✅ | ✅ |
-   | `lastModified` | Edm.DateTimeOffset | ❌ | ✅ | ✅ |
-
-### Step 7: Enable Vector Search (Recommended)
-
-For better semantic understanding:
-
-1. **Navigate**: AI Search → Index → **Vector Search**
-
-2. **Add Vector Configuration**:
-   
-   ```json
-   {
-     "vectorSearch": {
-       "algorithms": [{
-         "name": "hnsw-config",
-         "kind": "hnsw",
-         "hnswParameters": {
-           "metric": "cosine",
-           "m": 4,
-           "efConstruction": 400,
-           "efSearch": 500
-         }
-       }],
-       "profiles": [{
-         "name": "vector-profile",
-         "algorithm": "hnsw-config",
-         "vectorizer": "text-embedding-ada-002"
-       }]
-     }
-   }
+   https://codes.ohio.gov/ohio-revised-code/title-45
    ```
+4. **Parsing mode**: HTML
+5. **Crawler settings**: Depth = `10`, include subpages ✅
+6. **Vectorize text**: Select your **AI Services** resource → deployment `text-embedding-3-small`
+7. **Index name**: `ohio-title45-index`
+8. **Semantic configuration name**: `policy-semantic-config`
+9. Click **Create**
 
-### Step 8: Enable Semantic Ranking
+The indexer runs immediately. Expect **10–30 minutes** for the full site crawl.
 
-1. **Navigate**: AI Search → **Semantic Configurations**
+**Verify:** AI Search resource → **Indexers** → `ohio-title45-indexer` → document count should be > 0.
 
-2. **Create Configuration**:
-   
-   | Setting | Value |
-   |---------|-------|
-   | **Configuration Name** | `policy-semantic` |
-   | **Title Field** | `title` |
-   | **Content Fields** | `content` |
+{: .note }
+To schedule automatic weekly re-indexing: open the indexer → **Settings** → **Schedule** → Weekly.
 
-3. **Enable**: Set semantic search to "Free" or "Standard" tier
+### Alternative (Scripted)
 
----
-
-### Option B: Programmatic Search Configuration
-
-For automation and CI/CD, use the Azure AI Search REST API or the provided Python script.
-
-#### Prerequisites
-
-```bash
-pip install azure-search-documents azure-identity requests
-```
-
-#### Environment Variables
+If the portal wizard is unavailable or the site blocks the portal crawler, use the provided scripts:
 
 ```powershell
-$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
-$env:AZURE_SEARCH_ADMIN_KEY = "your-admin-key"  # Or use DefaultAzureCredential
-```
-
-#### Step 6B: Create Index with Vector Search via REST API
-
-```bash
-# Create the index with vector search and semantic configuration
-curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/indexes/policy-index?api-version=2024-07-01" \
-  -H "Content-Type: application/json" \
-  -H "api-key: ${SEARCH_ADMIN_KEY}" \
-  -d @- << 'EOF'
-{
-  "name": "policy-index",
-  "fields": [
-    { "name": "id", "type": "Edm.String", "key": true, "retrievable": true },
-    { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": "en.microsoft" },
-    { "name": "title", "type": "Edm.String", "searchable": true, "filterable": true, "retrievable": true, "analyzer": "en.microsoft" },
-    { "name": "url", "type": "Edm.String", "filterable": true, "retrievable": true },
-    { "name": "lastModified", "type": "Edm.DateTimeOffset", "filterable": true, "sortable": true, "retrievable": true },
-    { "name": "chunk_id", "type": "Edm.String", "filterable": true, "retrievable": true },
-    { "name": "parent_id", "type": "Edm.String", "filterable": true, "retrievable": true },
-    { "name": "content_vector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": false, "dimensions": 1536, "vectorSearchProfile": "vector-profile" }
-  ],
-  "vectorSearch": {
-    "algorithms": [
-      {
-        "name": "hnsw-config",
-        "kind": "hnsw",
-        "hnswParameters": { "metric": "cosine", "m": 4, "efConstruction": 400, "efSearch": 500 }
-      }
-    ],
-    "profiles": [
-      { "name": "vector-profile", "algorithmConfigurationName": "hnsw-config" }
-    ]
-  },
-  "semantic": {
-    "configurations": [
-      {
-        "name": "policy-semantic-config",
-        "prioritizedFields": {
-          "titleField": { "fieldName": "title" },
-          "prioritizedContentFields": [{ "fieldName": "content" }],
-          "prioritizedKeywordsFields": []
-        }
-      }
-    ]
-  }
-}
-EOF
-```
-
-#### Step 7B: Create Data Source (Web Crawler)
-
-```bash
-curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/datasources/policy-datasource?api-version=2024-07-01" \
-  -H "Content-Type: application/json" \
-  -H "api-key: ${SEARCH_ADMIN_KEY}" \
-  -d @- << 'EOF'
-{
-  "name": "policy-datasource",
-  "type": "web",
-  "credentials": { "connectionString": null },
-  "container": {
-    "name": "https://codes.ohio.gov/ohio-revised-code",
-    "query": null
-  },
-  "dataChangeDetectionPolicy": null
-}
-EOF
-```
-
-> ⚠️ **Note**: Web crawler data sources require configuration in the Azure Portal for crawl depth and domain restrictions. Use the Indexer configuration below as a starting point.
-
-#### Step 8B: Create Indexer with Skillset
-
-```bash
-# Create a skillset for chunking and embedding
-curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/skillsets/policy-skillset?api-version=2024-07-01" \
-  -H "Content-Type: application/json" \
-  -H "api-key: ${SEARCH_ADMIN_KEY}" \
-  -d @- << 'EOF'
-{
-  "name": "policy-skillset",
-  "description": "Skillset for chunking and embedding policy documents",
-  "skills": [
-    {
-      "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
-      "name": "split-skill",
-      "description": "Split content into chunks",
-      "context": "/document",
-      "inputs": [{ "name": "text", "source": "/document/content" }],
-      "outputs": [{ "name": "textItems", "targetName": "chunks" }],
-      "textSplitMode": "pages",
-      "maximumPageLength": 2000,
-      "pageOverlapLength": 200
-    },
-    {
-      "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
-      "name": "embedding-skill",
-      "description": "Generate embeddings",
-      "context": "/document/chunks/*",
-      "inputs": [{ "name": "text", "source": "/document/chunks/*" }],
-      "outputs": [{ "name": "embedding", "targetName": "content_vector" }],
-      "resourceUri": "https://YOUR-OPENAI.openai.azure.com",
-      "deploymentId": "text-embedding-ada-002",
-      "modelName": "text-embedding-ada-002"
-    }
-  ]
-}
-EOF
-
-# Create the indexer
-curl -X PUT "https://${SEARCH_SERVICE}.search.windows.net/indexers/policy-indexer?api-version=2024-07-01" \
-  -H "Content-Type: application/json" \
-  -H "api-key: ${SEARCH_ADMIN_KEY}" \
-  -d @- << 'EOF'
-{
-  "name": "policy-indexer",
-  "dataSourceName": "policy-datasource",
-  "targetIndexName": "policy-index",
-  "skillsetName": "policy-skillset",
-  "schedule": { "interval": "P7D" },
-  "parameters": {
-    "configuration": {
-      "dataToExtract": "contentAndMetadata",
-      "parsingMode": "default"
-    }
-  },
-  "fieldMappings": [
-    { "sourceFieldName": "metadata_storage_path", "targetFieldName": "id", "mappingFunction": { "name": "base64Encode" } },
-    { "sourceFieldName": "metadata_storage_path", "targetFieldName": "url" }
-  ],
-  "outputFieldMappings": [
-    { "sourceFieldName": "/document/chunks/*/content_vector", "targetFieldName": "content_vector" }
-  ]
-}
-EOF
-```
-
-#### Using Python Script (Recommended)
-
-For a more streamlined experience, use the provided script:
-
-```powershell
-# Set environment variables
-$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
-$env:AZURE_OPENAI_ENDPOINT = "https://your-openai.openai.azure.com"
-$env:CRAWL_URL = "https://codes.ohio.gov/ohio-revised-code"
-
-# Run the configuration script
-python scripts/configure-search.py
-```
-
-See [scripts/configure-search.py](../scripts/configure-search.py) for the full implementation.
-
----
-
-## Create the Foundry Agent
-
-You can create the agent using either the **Portal UI** (beginner-friendly) or **Python SDK** (programmatic/CI-CD).
-
-> 💡 **Prefer automation?** Skip to [Option B: Programmatic Creation (Python SDK)](#option-b-programmatic-creation-python-sdk) or use `scripts/create-agent.py`.
-
-### Option A: Portal UI (Recommended for Beginners)
-
-### Step 9: Access Microsoft Foundry
-
-1. Navigate to [AI Foundry Portal](https://ai.azure.com)
-2. Sign in with your Azure account
-3. Select your subscription
-
-### Step 10: Create Foundry Project (if needed)
-
-```mermaid
-flowchart LR
-    A["ai.azure.com"] --> B["+ New Project"]
-    B --> C["Name: policybot"]
-    C --> D["Region: East US 2"]
-    D --> E["Create"]
-```
-
-### Step 11: Create the Policy Bot Agent
-
-> 💡 **Prefer automation?** Skip to [Option B: Programmatic Creation](#option-b-programmatic-creation-python-sdk) to create the agent using Python SDK and `scripts/create-agent.py`.
-
-1. **Navigate**: Foundry Portal → Your Project → **Agents**
-
-2. **Click**: **+ New Agent**
-
-3. **Configure Agent**:
-
-   | Setting | Value |
-   |---------|-------|
-   | **Name** | `policy-bot` |
-   | **Type** | Prompt Agent |
-   | **Model** | GPT-4o |
-   | **Temperature** | 0.1 |
-
-4. **Add Knowledge Source**:
-   
-   - Click **+ Add Knowledge**
-   - Select **Azure AI Search**
-   - Connect to your search service
-   - Select your index
-
-5. **Configure System Prompt**:
-   
-   Copy the content from [foundry/prompts/system-prompt.md](../foundry/prompts/system-prompt.md):
-
-   ```markdown
-   You are Policy Bot, an expert assistant for government policy research.
-   
-   ## Core Rules
-   
-   1. **ONLY use information from the provided search results**
-   2. **NEVER make up or assume policy information**
-   3. **Always cite your sources with exact quotes**
-   
-   ## Citation Format
-   
-   For every claim, include:
-   - The exact quote from the source
-   - The source URL
-   - The relevant section/title
-   
-   Example response format:
-   
-   According to Ohio Revised Code Section 4511.01:
-   > "Vehicle means every device, including a motorized bicycle and 
-   > an electric bicycle, in, upon, or by which any person or property 
-   > may be transported..."
-   
-   Source: https://codes.ohio.gov/ohio-revised-code/section-4511.01
-   
-   ## When You Don't Know
-   
-   If the search results don't contain relevant information, say:
-   "I couldn't find specific information about [topic] in the indexed 
-   policy documents. Please try rephrasing your question or verify 
-   this topic is covered in the Ohio Revised Code."
-   ```
-
-### Step 12: Test the Agent
-
-1. **Use the Chat Interface**: Type a test question
-   
-   ```
-   What is the legal definition of a vehicle in Ohio?
-   ```
-
-2. **Verify Response Contains**:
-   - ✅ Direct answer
-   - ✅ Exact quote from source
-   - ✅ URL citation
-   - ✅ Section reference
-
-> 💡 **Programmatic testing:** Use `python scripts/create-agent.py test --agent-id <your-agent-id>` to test via CLI.
-
----
-
-### Option B: Programmatic Creation (Python SDK)
-
-For automation, CI/CD pipelines, or infrastructure-as-code workflows, use the **Azure AI Projects SDK**.
-
-#### Prerequisites
-
-```bash
-# Install the Azure AI Projects SDK
-pip install azure-ai-projects azure-identity
-```
-
-#### Step 9B: Create Agent Programmatically
-
-Create a file `scripts/create-agent.py`:
-
-```python
-"""
-Policy Bot Agent Creation Script
-Creates the Policy Bot agent programmatically using Azure AI Projects SDK
-"""
-import os
-from azure.identity import DefaultAzureCredential
-from azure.ai.projects import AIProjectClient
-from azure.ai.projects.models import (
-    AzureAISearchTool,
-    AzureAISearchToolParameters,
-)
-
-# Configuration - Update these values
-PROJECT_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT")  
-# Format: https://<resource>.services.ai.azure.com/api/projects/<project-name>
-
-SEARCH_SERVICE_ENDPOINT = os.environ.get("AZURE_SEARCH_ENDPOINT")
-# Format: https://<search-service>.search.windows.net
-
-SEARCH_INDEX_NAME = os.environ.get("AZURE_SEARCH_INDEX", "policy-index")
-MODEL_DEPLOYMENT = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
-
-# System prompt from foundry/prompts/system-prompt.md
-SYSTEM_PROMPT = """You are Policy Bot, an expert assistant for government policy research.
-
-## Core Rules
-
-1. **ONLY use information from the provided search results**
-2. **NEVER make up or assume policy information**
-3. **Always cite your sources with exact quotes**
-
-## Citation Format
-
-For every claim, include:
-- The exact quote from the source
-- The source URL
-- The relevant section/title
-
-Example response format:
-
-According to Ohio Revised Code Section 4511.01:
-> "Vehicle means every device, including a motorized bicycle and 
-> an electric bicycle, in, upon, or by which any person or property 
-> may be transported..."
-
-Source: https://codes.ohio.gov/ohio-revised-code/section-4511.01
-
-## When You Don't Know
-
-If the search results don't contain relevant information, say:
-"I couldn't find specific information about [topic] in the indexed 
-policy documents. Please try rephrasing your question or verify 
-this topic is covered in the Ohio Revised Code."
-"""
-
-def create_policy_bot_agent():
-    """Create the Policy Bot agent with Azure AI Search integration."""
-    
-    # Authenticate using DefaultAzureCredential (supports CLI, managed identity, etc.)
-    credential = DefaultAzureCredential()
-    
-    # Initialize the AI Project client
-    client = AIProjectClient(
-        endpoint=PROJECT_ENDPOINT,
-        credential=credential
-    )
-    
-    # Configure Azure AI Search as a knowledge source
-    search_tool = AzureAISearchTool(
-        parameters=AzureAISearchToolParameters(
-            index_connection_id=f"{SEARCH_SERVICE_ENDPOINT}/indexes/{SEARCH_INDEX_NAME}",
-            index_name=SEARCH_INDEX_NAME,
-            query_type="vector_semantic_hybrid",
-            semantic_configuration="policy-semantic-config",
-            top_n=10,
-            strictness=3,
-            in_scope=True,  # Critical: Only use search results, no external knowledge
-        )
-    )
-    
-    # Create the agent
-    agent = client.agents.create(
-        name="policy-bot",
-        model=MODEL_DEPLOYMENT,
-        instructions=SYSTEM_PROMPT,
-        tools=[search_tool],
-        temperature=0.1,  # Low temperature for factual responses
-        metadata={
-            "purpose": "Government policy research assistant",
-            "source": "Ohio Revised Code",
-            "created_by": "policybot-deployment-script"
-        }
-    )
-    
-    print(f"✅ Agent created successfully!")
-    print(f"   Agent ID: {agent.id}")
-    print(f"   Name: {agent.name}")
-    print(f"   Model: {agent.model}")
-    
-    return agent
-
-
-def test_agent(agent_id: str, test_query: str = "What is the legal definition of a vehicle in Ohio?"):
-    """Test the created agent with a sample query."""
-    
-    credential = DefaultAzureCredential()
-    client = AIProjectClient(
-        endpoint=PROJECT_ENDPOINT,
-        credential=credential
-    )
-    
-    # Create a thread for the conversation
-    thread = client.agents.threads.create()
-    
-    # Send test message
-    client.agents.messages.create(
-        thread_id=thread.id,
-        role="user",
-        content=test_query
-    )
-    
-    # Run the agent
-    run = client.agents.runs.create_and_wait(
-        thread_id=thread.id,
-        agent_id=agent_id
-    )
-    
-    # Get the response
-    messages = client.agents.messages.list(thread_id=thread.id)
-    response = messages.data[0].content[0].text.value
-    
-    print(f"\n📝 Test Query: {test_query}")
-    print(f"\n🤖 Agent Response:\n{response}")
-    
-    # Verify response quality
-    has_citation = "Source:" in response or "http" in response
-    has_quote = ">" in response or '\"' in response
-    
-    print(f"\n✅ Has citation: {has_citation}")
-    print(f"✅ Has quote: {has_quote}")
-    
-    return response
-
-
-if __name__ == "__main__":
-    # Create the agent
-    agent = create_policy_bot_agent()
-    
-    # Optionally test it
-    print("\n" + "="*50)
-    print("Testing agent...")
-    print("="*50)
-    test_agent(agent.id)
-```
-
-#### Step 10B: Run the Creation Script
-
-```powershell
-# Set environment variables
-$env:AZURE_AI_PROJECT_ENDPOINT = "https://your-resource.services.ai.azure.com/api/projects/policybot"
-$env:AZURE_SEARCH_ENDPOINT = "https://your-search.search.windows.net"
-$env:AZURE_SEARCH_INDEX = "policy-index"
-$env:AZURE_OPENAI_DEPLOYMENT = "gpt-4o"
-
-# Login to Azure (if not already)
-az login
-
-# Run the script
-python scripts/create-agent.py
-```
-
-**Expected Output:**
-```
-✅ Agent created successfully!
-   Agent ID: asst_abc123xyz
-   Name: policy-bot
-   Model: gpt-4o
-
-==================================================
-Testing agent...
-==================================================
-
-📝 Test Query: What is the legal definition of a vehicle in Ohio?
-
-🤖 Agent Response:
-According to Ohio Revised Code Section 4511.01:
-> "Vehicle means every device, including a motorized bicycle..."
-
-Source: https://codes.ohio.gov/ohio-revised-code/section-4511.01
-
-✅ Has citation: True
-✅ Has quote: True
-```
-
-#### Additional SDK Operations
-
-```python
-# List all agents in your project
-agents = client.agents.list()
-for agent in agents.data:
-    print(f"{agent.name}: {agent.id}")
-
-# Update an existing agent
-client.agents.update(
-    agent_id="asst_abc123xyz",
-    instructions=updated_system_prompt,
-    temperature=0.05  # Even lower for more deterministic responses
-)
-
-# Delete an agent
-client.agents.delete(agent_id="asst_abc123xyz")
-```
-
-#### CI/CD Integration
-
-For GitHub Actions, add this workflow:
-
-```yaml
-# .github/workflows/deploy-agent.yml
-name: Deploy Policy Bot Agent
-
-on:
-  push:
-    paths:
-      - 'foundry/prompts/**'
-      - 'scripts/create-agent.py'
-    branches: [main]
-
-jobs:
-  deploy-agent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install azure-ai-projects azure-identity
-      
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
-      - name: Deploy Agent
-        env:
-          AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
-          AZURE_SEARCH_ENDPOINT: ${{ secrets.AZURE_SEARCH_ENDPOINT }}
-          AZURE_SEARCH_INDEX: policy-index
-          AZURE_OPENAI_DEPLOYMENT: gpt-4o
-        run: python scripts/create-agent.py
+# Set environment variables printed by bootstrap.ps1, then:
+python scripts\configure-search.py create-index
+
+.\scripts\configure-crawler.ps1 `
+  -ResourceGroupName "rg-policybot" `
+  -SearchServiceName "search-policybot-XXXX" `
+  -IndexName "ohio-title45-index" `
+  -SeedUrl "https://codes.ohio.gov/ohio-revised-code/title-45" `
+  -CrawlDepth 10
 ```
 
 ---
 
-## Test Your Agent
+## Step 3 — Create the Foundry Agent
 
-### Manual Testing Checklist
+1. Go to [ai.azure.com](https://ai.azure.com)
+2. Select your project **`policybot-project`**
+3. Navigate to **Agents** → **New agent**
+4. Fill in the agent settings:
 
-| Test Case | Expected Behavior | Pass? |
-|-----------|-------------------|-------|
-| Simple question | Grounded answer with citation | ☐ |
-| Complex legal question | Multi-source answer | ☐ |
-| Question not in sources | "I don't know" response | ☐ |
-| Follow-up question | Context maintained | ☐ |
+   | Field | Value |
+   |-------|-------|
+   | Name | `ohio-title45-bot` |
+   | Model | `gpt-4o` |
+   | Temperature | `0.1` |
 
-### Sample Test Questions
+5. In the **Instructions** box, paste the full contents of
+   [`foundry/prompts/system-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/system-prompt.md)
+   (skip the first `#` heading line)
 
-```
-1. What are the requirements for vehicle registration in Ohio?
+6. Under **Knowledge** → **Add** → **Azure AI Search**, configure:
 
-2. How does Ohio law define "reckless operation"?
+   | Field | Value |
+   |-------|-------|
+   | Connection | `aisearch-conn` |
+   | Index | `ohio-title45-index` |
+   | Search type | `Hybrid (vector + keyword)` |
+   | Semantic ranker | Enabled — config: `policy-semantic-config` |
+   | Top K | `10` |
+   | Strictness | `4` |
+   | In scope only | ✅ Enabled |
 
-3. What is the penalty for driving without insurance?
+7. Click **Save**
 
-4. [Out of scope] What is the capital of France?
-   Expected: "I couldn't find information about this topic..."
-```
+---
+
+## Step 4 — Test in the Playground
+
+1. In the Foundry portal, open your agent and click **"Try in playground"**
+2. Test with these sample questions:
+
+   | Question | Expected behavior |
+   |----------|------------------|
+   | *"What is the legal definition of a vehicle in Ohio?"* | Quote from ORC 4501.01 with URL |
+   | *"What are the penalties for OVI (drunk driving)?"* | Quote from ORC 4511.19 with URL |
+   | *"What is the capital of France?"* | Scope refusal message |
+   | *"What does Title 1 of the ORC say?"* | Out-of-scope refusal message |
+
+**Signs the agent is configured correctly:**
+- ✅ Responses include exact quotes and `codes.ohio.gov` source URLs
+- ✅ Off-topic questions are declined with the configured refusal message
+- ✅ Answers for questions outside the indexed content say "I couldn't find"
+
+If answers are drawing on general knowledge (no citations), increase **Strictness** or verify
+the `In scope only` toggle is enabled.
+
+---
+
+## Step 5 — Deploy the Chat Web App
+
+1. From the Chat Playground, click **"Deploy"** → **"As a web app"**
+2. Configure:
+
+   | Field | Value |
+   |-------|-------|
+   | Subscription | `ee0073ce-de38-45ed-a940-4dbfd9435dc1` |
+   | Resource group | `rg-policybot` |
+   | App name | `policybot-webapp` |
+   | Pricing plan | F1 for testing / B1 for production |
+
+3. Click **Deploy** — takes about 3 minutes
+4. Once deployed, the portal shows the web app URL
+
+Share the URL (`https://policybot-webapp.azurewebsites.net`) with users.
+
+---
+
+## Keeping the Knowledge Base Current
+
+When codes.ohio.gov publishes updates to Title 45:
+
+1. Go to AI Search → **Indexers** → `ohio-title45-indexer`
+2. Click **Run** to trigger an immediate re-crawl
+
+If weekly scheduling is configured in Step 2, this happens automatically.
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
-
-#### Issue: "Search results are empty"
-
-```mermaid
-flowchart TB
-    A["Empty Results"] --> B{"Indexer Status?"}
-    B -->|"Failed"| C["Check Data Source URL"]
-    B -->|"Running"| D["Wait for completion"]
-    B -->|"Success"| E["Check index has docs"]
-    E -->|"0 docs"| F["Review crawler scope"]
-    E -->|"Has docs"| G["Query syntax issue"]
-```
-
-**Solution:**
-```bash
-# Check indexer status
-az search indexer show \
-  --resource-group $RESOURCE_GROUP \
-  --service-name $SEARCH_NAME \
-  --name "your-indexer-name"
-```
-
-#### Issue: "Agent not grounding responses"
-
-**Causes:**
-1. Knowledge source not connected
-2. System prompt missing grounding rules
-3. Temperature too high
-
-**Solution:**
-1. Verify knowledge source in agent settings
-2. Re-apply system prompt from template
-3. Set temperature to 0.1 or lower
-
-#### Issue: "Deployment failed"
-
-```bash
-# Check deployment errors
-az deployment group show \
-  --resource-group $RESOURCE_GROUP \
-  --name "main" \
-  --query "properties.error"
-```
-
-Common causes:
-- Quota exceeded (request increase)
-- Region not available (try different region)
-- Name conflicts (use unique suffix)
-
----
-
-## Next Steps
-
-✅ **Deployment Complete!**
-
-- [Evaluation Guide](evaluation-guide.md) - **Measure and improve your agent's effectiveness**
-- [Architecture Documentation](architecture.md) - Understand how it works
-- [Cost Estimation](cost-estimation.md) - Plan your budget
-- [Pain Points Addressed](pain-points-addressed.md) - Technical deep-dive
-
-### Evaluate Your Agent
-
-After deployment, it's critical to evaluate your agent's effectiveness:
-
-1. **Run Manual Tests** - Use the Foundry chat interface with test queries
-2. **Check Groundedness** - Verify responses come only from indexed documents
-3. **Validate Citations** - Ensure every answer includes proper citations
-4. **Set Up Automated Evaluation** - Use Foundry's built-in evaluators for continuous monitoring
-
-See the [Evaluation Guide](evaluation-guide.md) for detailed instructions on measuring:
-- Groundedness (are answers from indexed documents?)
-- Relevance (do answers address the question?)
-- Citation accuracy (are citations valid and useful?)
-
----
-
-## Quick Reference
-
-### Full Automation (All Steps)
-
-Deploy everything programmatically:
-
-```powershell
-# Step 1: Clone repo
-git clone https://github.com/ricardo-msft-SE/policybot1.git
-cd policybot1
-
-# Step 2: Install Python dependencies
-pip install -r requirements.txt
-
-# Steps 3-5: Deploy infrastructure
-.\scripts\deploy.ps1 -ResourceGroupName "rg-policybot" -Location "eastus2"
-
-# Steps 6-8: Configure search index
-$env:AZURE_SEARCH_ENDPOINT = "https://YOUR-SEARCH.search.windows.net"
-$env:AZURE_OPENAI_ENDPOINT = "https://YOUR-OPENAI.openai.azure.com"
-python scripts/configure-search.py create-all
-python scripts/configure-search.py run-indexer
-
-# Wait for indexer to complete (check status)
-python scripts/configure-search.py status
-
-# Steps 9-12: Create and test agent
-$env:AZURE_AI_PROJECT_ENDPOINT = "https://YOUR-RESOURCE.services.ai.azure.com/api/projects/policybot"
-python scripts/create-agent.py create
-```
-
-### Scripts Summary
-
-| Script | Steps | Description |
-|--------|-------|-------------|
-| `scripts/deploy.ps1` | 3-5 | Deploy Bicep infrastructure |
-| `scripts/deploy.sh` | 3-5 | Deploy Bicep (Linux/Mac) |
-| `scripts/configure-search.py` | 6-8 | Configure index, skillset, indexer |
-| `scripts/create-agent.py` | 9-12 | Create Foundry agent |
-
-### Resource Names
-
-After deployment, find your resources:
-
-```bash
-# List all resources
-az resource list -g $RESOURCE_GROUP -o table
-
-# Get connection strings
-az search service show -g $RESOURCE_GROUP -n $SEARCH_NAME
-```
-
-### Useful Links
-
-| Resource | URL |
-|----------|-----|
-| Azure Portal | https://portal.azure.com |
-| AI Foundry | https://ai.azure.com |
-| Azure AI Search | https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.Search%2FsearchServices |
-| Documentation | https://learn.microsoft.com/azure/ai-services/ |
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Agent answers from general knowledge (no citations) | `In scope only` is off | Re-check knowledge source settings |
+| "I couldn't find" for valid Title 45 questions | Index not populated | Check indexer status; wait for crawl to finish |
+| Web app returns 503 | App Service cold start (F1 tier) | Wait 30 seconds and refresh |
+| Indexer shows 0 documents | Site blocked portal crawler | Use `configure-crawler.ps1` script alternative |
+| `bootstrap.ps1` fails at model deployment | TPM quota limit | Reduce capacity or switch `Location` to another region |
+| Agent not found in Foundry portal | Wrong project selected | Ensure `policybot-project` is selected, not the hub |
