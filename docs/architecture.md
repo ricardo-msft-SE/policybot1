@@ -129,6 +129,7 @@ infra/
   main.bicep                 ← root template, wires all modules
   modules/
     ai-services.bicep        ← Azure AI Services (kind=AIServices)
+    foundry-project.bicep    ← Foundry Project (hub-less, kind=Project)
     ai-search.bicep          ← Azure AI Search (Basic SKU)
     openai.bicep             ← model deployments (gpt-4o, text-embedding-3-small)
     app-insights.bicep       ← Application Insights
@@ -136,7 +137,9 @@ infra/
 ```
 
 All resources deploy to resource group `rg-policybot` in `eastus2`.
-The Foundry Hub and Project are created by `scripts/bootstrap.ps1` after Bicep completes.
+The Foundry Project is provisioned by `scripts/bootstrap.ps1` after Bicep completes,
+using `az ml workspace create --kind Project --hub-id <AI-Services-resource-ID>`.
+No Hub workspace is created — this is the latest Azure AI Foundry architecture.
 
 ---
 

@@ -19,7 +19,6 @@ param(
     [string]$SubscriptionId  = "ee0073ce-de38-45ed-a940-4dbfd9435dc1",
     [string]$ResourceGroupName = "rg-policybot",
     [string]$Location          = "eastus2",
-    [string]$HubName           = "policybot-hub",
     [string]$ProjectName       = "policybot-project",
     [switch]$InstallPackages,
     [switch]$SkipInfra,
@@ -217,9 +216,13 @@ if (-not $WhatIf) {
 }
 
 # ============================================================================
-# 6. Create Foundry Hub & Project
+# 6. Create Foundry Project (hub-less — new AI Foundry model)
 # ============================================================================
-Step "Setting up Azure AI Foundry Hub and Project"
+# The new Azure AI Foundry model does NOT require a Hub workspace.
+# A Project is created directly, linked to the AI Services account via
+# --hub-id pointing to the CognitiveServices resource ID.
+# ============================================================================
+Step "Setting up Azure AI Foundry Project (hub-less)"
 
 if (-not $WhatIf) {
     # Ensure az ml extension is installed
@@ -230,118 +233,45 @@ if (-not $WhatIf) {
         Ok "az ml extension installed"
     } else { Ok "az ml extension available" }
 
-    # AI Services resource ID for hub connection
+    # AI Services resource ID — the Project links to this directly (no Hub needed)
     $AiServicesResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.CognitiveServices/accounts/$AiServicesName"
 
-    # Create storage account for Foundry Hub (required)
-    $StorageAccountName = "stpolicybot$(([guid]::NewGuid().ToString().Replace('-',''))[0..7] -join '')"
-    $existingStorage = az storage account show --name $StorageAccountName --resource-group $ResourceGroupName --output json 2>$null | ConvertFrom-Json
-    if (-not $existingStorage) {
-        # Use a deterministic name based on resource group name
-        $hashBytes = [System.Text.Encoding]::UTF8.GetBytes($ResourceGroupName + $SubscriptionId)
-        $storageSuffix = ([System.BitConverter]::ToString([System.Security.Cryptography.MD5]::Create().ComputeHash($hashBytes)) -replace '-','').Substring(0,8).ToLower()
-        $StorageAccountName = "stpltbot$storageSuffix"
-        Write-Host "   Creating storage for Foundry Hub: $StorageAccountName" -ForegroundColor Gray
-        az storage account create `
-            --name $StorageAccountName `
-            --resource-group $ResourceGroupName `
-            --location $Location `
-            --sku Standard_LRS `
-            --kind StorageV2 `
-            --output none
-        Ok "Storage account created: $StorageAccountName"
-    } else { Ok "Storage account exists" }
-
-    $StorageResourceId = az storage account show --name $StorageAccountName --resource-group $ResourceGroupName --query id -o tsv
-
-    # Create Foundry Hub
-    $hubExists = az ml workspace show --name $HubName --resource-group $ResourceGroupName --output json 2>$null | ConvertFrom-Json
-    if (-not $hubExists) {
-        Write-Host "   Creating Foundry Hub: $HubName..." -ForegroundColor Gray
+    # Create Foundry Project linked directly to AI Services (hub-less)
+    $projectExists = az ml workspace show --name $ProjectName --resource-group $ResourceGroupName --output json 2>$null | ConvertFrom-Json
+    if (-not $projectExists) {
+        Write-Host "   Creating Foundry Project: $ProjectName (hub-less)..." -ForegroundColor Gray
         az ml workspace create `
-            --name $HubName `
+            --name $ProjectName `
             --resource-group $ResourceGroupName `
             --location $Location `
-            --kind Hub `
-            --storage-account $StorageResourceId `
+            --kind Project `
+            --hub-id $AiServicesResourceId `
             --output none
-        Ok "Foundry Hub created: $HubName"
-    } else { Ok "Foundry Hub already exists: $HubName" }
+        Ok "Foundry Project created: $ProjectName"
+    } else { Ok "Foundry Project already exists: $ProjectName" }
 
-    $HubResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.MachineLearningServices/workspaces/$HubName"
-
-    # Connect AI Services to Hub
-    $connName = "aiservices-conn"
-    $connCheck = az ml connection show --name $connName --workspace-name $HubName --resource-group $ResourceGroupName --output json 2>$null
-    if (-not $connCheck) {
-        Write-Host "   Connecting AI Services to Hub..." -ForegroundColor Gray
-        $connYaml = @"
-name: $connName
-type: azure_ai_services
-endpoint: $AiServicesEndpoint
-resource_id: $AiServicesResourceId
-is_shared: true
-"@
-        $connFile = [System.IO.Path]::GetTempFileName() + ".yaml"
-        $connYaml | Set-Content $connFile -Encoding UTF8
-        az ml connection create `
-            --file $connFile `
-            --workspace-name $HubName `
-            --resource-group $ResourceGroupName `
-            --output none
-        Remove-Item $connFile
-        Ok "AI Services connected to Hub"
-    } else { Ok "AI Services connection already exists" }
-
-    # Connect AI Search to Hub
+    # Connect AI Search directly to the Project
     $searchKey = az search admin-key show --resource-group $ResourceGroupName --service-name $SearchServiceName --query primaryKey -o tsv
     $searchConnName = "aisearch-conn"
-    $searchConnCheck = az ml connection show --name $searchConnName --workspace-name $HubName --resource-group $ResourceGroupName --output json 2>$null
+    $searchConnCheck = az ml connection show --name $searchConnName --workspace-name $ProjectName --resource-group $ResourceGroupName --output json 2>$null
     if (-not $searchConnCheck) {
-        Write-Host "   Connecting AI Search to Hub..." -ForegroundColor Gray
+        Write-Host "   Connecting AI Search to Project..." -ForegroundColor Gray
         $searchConnYaml = @"
 name: $searchConnName
 type: azure_ai_search
 endpoint: $SearchEndpoint
 api_key: $searchKey
-is_shared: true
 "@
         $searchConnFile = [System.IO.Path]::GetTempFileName() + ".yaml"
         $searchConnYaml | Set-Content $searchConnFile -Encoding UTF8
         az ml connection create `
             --file $searchConnFile `
-            --workspace-name $HubName `
+            --workspace-name $ProjectName `
             --resource-group $ResourceGroupName `
             --output none
         Remove-Item $searchConnFile
-        Ok "AI Search connected to Hub"
+        Ok "AI Search connected to Project ($searchConnName)"
     } else { Ok "AI Search connection already exists" }
-
-    # Create Foundry Project
-    $projectExists = az ml workspace show --name $ProjectName --resource-group $ResourceGroupName --output json 2>$null | ConvertFrom-Json
-    if (-not $projectExists) {
-        Write-Host "   Creating Foundry Project: $ProjectName..." -ForegroundColor Gray
-        az ml workspace create `
-            --name $ProjectName `
-            --resource-group $ResourceGroupName `
-            --kind Project `
-            --hub-id $HubResourceId `
-            --output none
-        Ok "Foundry Project created: $ProjectName"
-    } else { Ok "Foundry Project already exists: $ProjectName" }
-
-    # Get project endpoint for AIProjectClient
-    $projectInfo = az ml workspace show --name $ProjectName --resource-group $ResourceGroupName --output json | ConvertFrom-Json
-    # The discovered URL format for AIProjectClient
-    $discoveryUrl = $projectInfo.discovery_url
-    # Construct the API endpoint from discovery URL
-    if ($discoveryUrl -match "https://([^/]+)/") {
-        $apiHost = $Matches[1]
-        $ProjectEndpoint = "https://$apiHost/api/projects/$ProjectName"
-    } else {
-        $ProjectEndpoint = $AiServicesEndpoint.TrimEnd('/') + "/api/projects/$ProjectName"
-    }
-    Ok "Project endpoint: $ProjectEndpoint"
 }
 
 # ============================================================================
@@ -372,7 +302,6 @@ Write-Host "  ──────────────────────
 if (-not $WhatIf) {
     Write-Host "  AI Search:      $SearchEndpoint" -ForegroundColor Cyan
     Write-Host "  AI Services:    $AiServicesEndpoint" -ForegroundColor Cyan
-    Write-Host "  Foundry Hub:    $HubName" -ForegroundColor Cyan
     Write-Host "  Foundry Project:$ProjectName" -ForegroundColor Cyan
 }
 Write-Host ""
@@ -388,7 +317,7 @@ Write-Host "     Depth:      10" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  2. CREATE AGENT" -ForegroundColor White
 Write-Host "     Portal: https://ai.azure.com -> Project: $ProjectName" -ForegroundColor Gray
-Write-Host "     Agents -> New agent -> Name: ohio-title45-bot" -ForegroundColor Gray
+
 Write-Host "     Model: gpt-4o  Temperature: 0.1" -ForegroundColor Gray
 Write-Host "     Paste system prompt from: foundry/prompts/system-prompt.md" -ForegroundColor Gray
 Write-Host "     Add knowledge: aisearch-conn / ohio-title45-index" -ForegroundColor Gray

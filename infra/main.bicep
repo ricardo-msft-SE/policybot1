@@ -48,6 +48,9 @@ param openAiModelVersion string = '2024-08-06'
 @description('Azure OpenAI TPM (tokens per minute) quota')
 param openAiTpm int = 30000
 
+@description('Name of the Foundry Project (hub-less)')
+param foundryProjectName string = 'policybot-project'
+
 @description('Tags for all resources')
 param tags object = {
   project: 'policybot'
@@ -65,6 +68,7 @@ var openAiServiceName = 'aoai-${baseName}-${uniqueSuffix}'
 var aiServicesName = 'ais-${baseName}-${uniqueSuffix}'
 var logAnalyticsName = 'log-${baseName}-${uniqueSuffix}'
 var appInsightsName = 'appi-${baseName}-${uniqueSuffix}'
+// Foundry Project name is passed in so users can override from bootstrap.ps1
 
 // ============================================================================
 // Modules
@@ -128,6 +132,19 @@ module aiServices 'modules/ai-services.bicep' = {
   }
 }
 
+// Azure AI Foundry Project (hub-less — links directly to AI Services)
+// New model: no Hub workspace required; hubResourceId points to a
+// CognitiveServices/AIServices account instead of an ML Hub workspace.
+module foundryProject 'modules/foundry-project.bicep' = {
+  name: 'deploy-foundry-project'
+  params: {
+    name: foundryProjectName
+    location: location
+    aiServicesResourceId: aiServices.outputs.resourceId
+    tags: tags
+  }
+}
+
 // ============================================================================
 // Outputs
 // ============================================================================
@@ -164,3 +181,9 @@ output resourceGroupName string = resourceGroup().name
 
 @description('Deployment location')
 output location string = location
+
+@description('Foundry Project name')
+output foundryProjectName string = foundryProject.outputs.projectName
+
+@description('Foundry Project resource ID')
+output foundryProjectId string = foundryProject.outputs.projectId

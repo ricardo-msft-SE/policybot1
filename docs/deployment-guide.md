@@ -31,8 +31,8 @@ steps are portal clicks — no SDK code required.
 
 ## Step 1 — Deploy Azure Infrastructure
 
-This is the only automated step. It deploys all Azure resources and creates the Foundry Hub
-and Project.
+This is the only automated step. It deploys all Azure resources and creates the Foundry
+Project (hub-less — the new Azure AI Foundry model).
 
 ```powershell
 # From the repo root
@@ -49,8 +49,8 @@ What `bootstrap.ps1` creates:
 - Azure AI Services with `gpt-4o` and `text-embedding-3-small` deployments
 - Azure AI Search (Basic SKU)
 - Application Insights + Log Analytics workspace
-- Foundry Hub (`policybot-hub`) and Project (`policybot-project`)
-- AI Services connection (`aiservices-conn`) and AI Search connection (`aisearch-conn`) in the Hub
+- **Foundry Project** (`policybot-project`) linked directly to AI Services — no Hub workspace required
+- AI Search connection (`aisearch-conn`) registered on the Project
 
 When it finishes, the script prints a **configuration summary** with endpoints — keep this
 window open for the next steps.
@@ -196,4 +196,5 @@ If weekly scheduling is configured in Step 2, this happens automatically.
 | Web app returns 503 | App Service cold start (F1 tier) | Wait 30 seconds and refresh |
 | Indexer shows 0 documents | Site blocked portal crawler | Use `configure-crawler.ps1` script alternative |
 | `bootstrap.ps1` fails at model deployment | TPM quota limit | Reduce capacity or switch `Location` to another region |
-| Agent not found in Foundry portal | Wrong project selected | Ensure `policybot-project` is selected, not the hub |
+| Agent not found in Foundry portal | Wrong project selected | Ensure `policybot-project` is selected |
+| `az ml workspace create` fails on hub-less | Old az ml extension | Run `az extension update --name ml` |
