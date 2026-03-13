@@ -175,7 +175,7 @@ Best when reducing misroutes is more important than raw latency.
 
 ```mermaid
 flowchart LR
-    Q[Question] --> P[Parallel candidate retrieval\n(top 2 specialists)]
+  Q[Question] --> P[Parallel candidate retrieval - top 2 specialists]
     P --> S1[Candidate response A]
     P --> S2[Candidate response B]
     S1 --> K[Ranker / policy checker]
