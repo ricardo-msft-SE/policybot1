@@ -1,3 +1,9 @@
+---
+layout: default
+title: Cost Estimation
+nav_order: 7
+---
+
 # Azure Cost Estimation
 
 > Monthly cost scenarios for Policy Bot deployment

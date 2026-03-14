@@ -1,3 +1,9 @@
+---
+layout: default
+title: Pain Points Addressed
+nav_order: 8
+---
+
 # Addressing Key Pain Points
 
 > How Policy Bot solves deep search, hallucination, and citation challenges

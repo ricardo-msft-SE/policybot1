@@ -1,3 +1,9 @@
+---
+layout: default
+title: Evaluation Guide
+nav_order: 6
+---
+
 # Evaluating Policy Bot Effectiveness
 
 > How to measure and improve Policy Bot's accuracy using Microsoft Foundry Evaluations
