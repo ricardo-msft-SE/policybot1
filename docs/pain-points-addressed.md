@@ -206,13 +206,17 @@ def generate_response(user_query):
 {user_question}
 ```
 
-**3. Low Temperature Setting**
+**3. Low Temperature Setting (Supporting Control)**
 
 | Setting | Value | Effect |
 |---------|-------|--------|
-| Temperature | 0.1 | Minimal creativity, maximum factuality |
+| Temperature | 0.1 | Reduces hallucination tendency (not a guarantee) |
 | Top-P | 0.95 | Focused token selection |
 | Frequency Penalty | 0 | No artificial variation |
+
+{: .note }
+Grounding is enforced primarily by retrieval scope, system prompt rules, and output validation.
+Model temperature helps consistency but does not independently prevent hallucinations.
 
 #### Verification
 

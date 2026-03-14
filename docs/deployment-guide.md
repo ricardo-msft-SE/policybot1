@@ -26,7 +26,7 @@ workflow router.
 | Azure subscription (Contributor role) | `az account show` |
 | Azure CLI installed | `az --version` |
 | PowerShell 7+ | `$PSVersionTable.PSVersion` |
-| Subscription ID | `ee0073ce-de38-45ed-a940-4dbfd9435dc1` |
+| Subscription ID | `{YOUR_SUBSCRIPTION_ID}` from `az account show --query id -o tsv` |
 
 ---
 
@@ -93,6 +93,38 @@ POST /api/chat
    "citations": [],
    "routeType": "legal_reference|bmv_faq",
    "clarificationAsked": true
+}
+```
+
+### API Contract Details
+
+#### Request validation
+
+| Field | Constraints | Notes |
+|-------|-------------|-------|
+| `question` | Max 2000 chars | Reject larger payloads with 400 |
+| `sessionId` | UUID or stable string ID | Required to track clarification loops |
+| `userId` | Max 100 chars | Use pseudonymous ID where possible |
+
+#### Response codes
+
+| Code | Condition | Example response |
+|------|-----------|------------------|
+| 200 | Success | `{"answer":"...","citations":[],"routeType":"legal_reference"}` |
+| 400 | Invalid input | `{"error":"invalid_request","detail":"question exceeds 2000 chars"}` |
+| 401 | Auth failure | `{"error":"invalid_gateway_credentials"}` |
+| 503 | Workflow timeout | `{"error":"workflow_timeout","retryAfter":30}` |
+
+#### Clarification response shape
+
+When the workflow asks a follow-up question, return a structured payload:
+
+```json
+{
+   "clarificationAsked": true,
+   "clarificationQuestion": "Are you asking about what the law says, or about BMV process steps?",
+   "sessionId": "<same-session-id>",
+   "routeType": "pending"
 }
 ```
 
@@ -406,6 +438,41 @@ In Application Insights, track:
 - out-of-scope refusal rate
 - citation completeness failures
 - workflow node errors
+
+Create alerts:
+
+1. **Workflow failure alert**
+   - Signal: Failed requests / exceptions
+   - Threshold: > 5 failures in 15 minutes
+2. **Latency alert**
+   - Signal: P95 request duration
+   - Threshold: > 4 seconds for 15 minutes
+3. **Clarification spike alert**
+   - Signal: clarificationAsked=true ratio
+   - Threshold: > 40% over 30 minutes
+
+Useful KQL queries:
+
+```kusto
+requests
+| where timestamp > ago(24h)
+| summarize count(), p95=percentile(duration,95) by tostring(customDimensions.routeType)
+```
+
+```kusto
+customEvents
+| where timestamp > ago(24h)
+| where name == "WorkflowDecision"
+| summarize clarifications=sum(toint(customDimensions.clarificationAsked)), total=count()
+| extend clarificationRate = todouble(clarifications) / todouble(total)
+```
+
+```kusto
+customEvents
+| where timestamp > ago(24h)
+| where name == "ResponseValidation"
+| summarize missingCitations=countif(tostring(customDimensions.citationsPresent) == "false")
+```
 
 ---
 

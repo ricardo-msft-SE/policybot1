@@ -228,6 +228,7 @@ No Hub workspace is created — this is the latest Azure AI Foundry architecture
 ## Next Steps
 
 - [Deployment Guide]({{ site.baseurl }}/deployment-guide) — Deploy this architecture
-- [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) — Review workflow node-level routing and clarification behavior
+- [Workflow Architecture]({{ site.baseurl }}/workflow-architecture) — Review workflow node-level routing and clarification behavior
 - [Configuration Reference]({{ site.baseurl }}/configuration) — Tune agent and search settings
+- [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints) — Confirm scope boundaries and non-goals
 - [Cost Estimation]({{ site.baseurl }}/cost-estimation) — Understand pricing

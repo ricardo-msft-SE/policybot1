@@ -209,6 +209,24 @@ flowchart LR
 | **Monthly Total** | **$2,410** | **$4,700** |
 | **With Buffer (1.3x)** | **$3,133** | **$6,110** |
 
+### Annual Budget (Public Facing)
+
+| Component | Low Estimate | High Estimate |
+|-----------|--------------|---------------|
+| Monthly Cost (with buffer) | $3,133 | $6,110 |
+| Annual Cost | **$37,596** | **$73,320** |
+
+### Choosing Between Internal and Public Scenarios
+
+| Factor | Internal Scenario | Public Facing Scenario |
+|--------|-------------------|------------------------|
+| Expected monthly queries | < 10,000 | > 100,000 |
+| Availability target | Standard | High availability with failover |
+| Search replicas | 1 | 3+ |
+| Recommended starting monthly budget | ~$500 | ~$3,000 |
+
+If traffic and availability needs are uncertain, start with the internal profile and scale up using observed usage metrics.
+
 ---
 
 ## Cost Comparison Chart

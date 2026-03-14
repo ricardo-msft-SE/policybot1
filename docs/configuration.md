@@ -21,10 +21,10 @@ Reference for all tunable settings in the Policy Bot.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `SubscriptionId` | `ee0073ce-de38-45ed-a940-4dbfd9435dc1` | Azure subscription |
+| `SubscriptionId` | `{YOUR_SUBSCRIPTION_ID}` | Azure subscription (`az account show --query id`) |
 | `ResourceGroupName` | `rg-policybot` | Resource group to deploy into |
 | `Location` | `eastus2` | Azure region |
-| `HubName` | `policybot-hub` | Foundry Hub name |
+| `HubName` | `policybot-hub` | Optional compatibility parameter; Project is primary |
 | `ProjectName` | `policybot-project` | Foundry Project name |
 | `-InstallPackages` | *(switch)* | Installs Python dependencies before running |
 | `-SkipInfra` | *(switch)* | Skips Bicep deployment (re-runs connections only) |
@@ -70,6 +70,10 @@ The "Import and vectorize data" wizard creates these key fields automatically:
 ---
 
 ## Web Crawler Settings
+
+Detailed setup steps live in [Deployment Guide Step 3]({{ site.baseurl }}/deployment-guide#step-3--index-ohio-revised-code-title-45).
+
+Use this section as a value reference for tuning after initial deployment.
 
 Configure in **Azure Portal → AI Search → Indexers → `ohio-title45-indexer`**:
 

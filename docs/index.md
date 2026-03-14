@@ -36,6 +36,23 @@ The Ohio ORC Title 45 Policy Bot is an AI assistant that:
 
 ![Architecture diagram](arch11.png)
 
+## Terminology
+
+- **Product name (prose):** Ohio ORC Title 45 Policy Bot
+- **Resource names (code/portal):** `policybot-*` format (for example, `rg-policybot`, `policybot-project`)
+- **Placeholders in docs:** values in `{BRACES}` must be replaced in your environment
+
+## Documentation Map
+
+Use this order for fastest onboarding:
+
+1. [Architecture]({{ site.baseurl }}/architecture)
+2. [Workflow Architecture]({{ site.baseurl }}/workflow-architecture)
+3. [Deployment Guide]({{ site.baseurl }}/deployment-guide)
+4. [Configuration Reference]({{ site.baseurl }}/configuration)
+5. [Evaluation Guide]({{ site.baseurl }}/evaluation-guide)
+6. [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints)
+
 ## Architecture at a Glance
 
 | Component | Azure Service | How It's Configured |
@@ -70,9 +87,10 @@ Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for back
 |------|---------|
 | [Home]({{ site.baseurl }}/) | Overview and quick-start entry point |
 | [Architecture]({{ site.baseurl }}/architecture) | Component design, data flow, infrastructure layout |
-| [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) | Primary workflow orchestration design with clarification-question routing |
+| [Workflow Architecture]({{ site.baseurl }}/workflow-architecture) | Primary workflow orchestration design with clarification-question routing |
 | [Deployment Guide]({{ site.baseurl }}/deployment-guide) | Step-by-step portal walkthrough |
 | [Configuration Reference]({{ site.baseurl }}/configuration) | All tuneable settings |
 | [Evaluation Guide]({{ site.baseurl }}/evaluation-guide) | Testing accuracy and groundedness |
 | [Cost Estimation]({{ site.baseurl }}/cost-estimation) | Azure pricing for internal and public scenarios |
 | [Pain Points Addressed]({{ site.baseurl }}/pain-points-addressed) | Deep search, hallucination, and citation design |
+| [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints) | Scope boundaries, routing constraints, and non-goals |
