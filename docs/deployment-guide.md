@@ -201,6 +201,34 @@ Create and initialize these state variables at workflow start:
 | `routeType` | string | `"unrouted"` | Final selected route |
 | `needsUncertaintyNote` | bool | `false` | Mark unresolved ambiguity |
 
+### 5.1a Workflow decision flow
+
+```mermaid
+flowchart TD
+   A[Start originalQuestion] --> B{Node 1 Scope guard inScope}
+   B -- No --> R[Return scope refusal]
+   B -- Yes --> C[Node 2 Intent classifier]
+   C --> D{Node 3 Confidence meets threshold}
+
+   D -- Yes --> E{Node 6 Route by intent}
+   D -- No --> F{clarificationTurns less than 2}
+   F -- Yes --> G[Node 4 Ask follow-up question]
+   G --> H[Node 5 Reclassify with combinedQuestion]
+   H --> D
+
+   F -- No --> I[Set routeType legal_reference and needsUncertaintyNote true]
+   I --> E
+
+   E -- legal_reference --> J[Invoke legal-reference-agent]
+   E -- bmv_faq --> K[Invoke bmv-faq-agent]
+   J --> L[Node 7 Synthesis and citation check]
+   K --> L
+
+   L --> M{citations present}
+   M -- No --> N[Return grounded not-found response]
+   M -- Yes --> O[Return final payload with route metadata]
+```
+
 ### 5.2 Node 1 — Scope guard
 
 **Goal:** reject non-Title 45 questions before any agent invocation.
