@@ -34,6 +34,8 @@ The Ohio ORC Title 45 Policy Bot is an AI assistant that:
 > router. The workflow can ask follow-up clarification questions before selecting the
 > final domain agent route.
 
+![Architecture diagram](arch11.png)
+
 ## Architecture at a Glance
 
 | Component | Azure Service | How It's Configured |
