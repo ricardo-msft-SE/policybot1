@@ -52,6 +52,7 @@ Use this order for fastest onboarding:
 4. [Configuration Reference]({{ site.baseurl }}/configuration)
 5. [Evaluation Guide]({{ site.baseurl }}/evaluation-guide)
 6. [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints)
+7. [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding)
 
 ## Architecture at a Glance
 
@@ -94,3 +95,4 @@ Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for back
 | [Cost Estimation]({{ site.baseurl }}/cost-estimation) | Azure pricing for internal and public scenarios |
 | [Pain Points Addressed]({{ site.baseurl }}/pain-points-addressed) | Deep search, hallucination, and citation design |
 | [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints) | Scope boundaries, routing constraints, and non-goals |
+| [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding) | Grounding strategy trade-offs and recommended profile |

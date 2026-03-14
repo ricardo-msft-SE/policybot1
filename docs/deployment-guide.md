@@ -138,6 +138,12 @@ legal reasoning.
 
 Use the Azure AI Search portal wizard to crawl and vectorize Title 45. No scraper code needed.
 
+{: .important }
+AI Search is the recommended grounding source for this solution because legal answers require
+stable retrieval, strict corpus boundaries, and repeatable citation behavior.
+See [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding)
+for trade-offs.
+
 1. Open [portal.azure.com](https://portal.azure.com) and navigate to your **AI Search** resource (`search-policybot-*`)
 2. Click **"Import and vectorize data"**
 3. **Data source**: Select **Web** → enter seed URL:
@@ -154,6 +160,16 @@ Use the Azure AI Search portal wizard to crawl and vectorize Title 45. No scrape
 The indexer runs immediately. Expect **10–30 minutes** for the full site crawl.
 
 **Verify:** AI Search resource → **Indexers** → `ohio-title45-indexer` → document count should be > 0.
+
+Recommended production profile for this use case:
+
+| Setting | Value | Why |
+|--------|-------|-----|
+| Query mode | `vector_semantic_hybrid` | Hybrid precision for legal text |
+| Strictness | `4` | Reduces weak-context responses |
+| Top K | `10` | Enough context for section-level answers |
+| In-scope | `true` | Enforces domain boundary |
+| Semantic config | `policy-semantic-config` | Better relevance for statutory language |
 
 {: .note }
 To schedule automatic weekly re-indexing: open the indexer → **Settings** → **Schedule** → Weekly.

@@ -17,6 +17,32 @@ Reference for all tunable settings in the Policy Bot.
 
 ---
 
+## AI Search Strategy for this Use Case
+
+For this policy/legal assistant, AI Search is the production grounding baseline.
+
+Why this is emphasized:
+
+- legal responses require strict scope control
+- citation quality depends on stable metadata fields
+- workflow routing quality improves with deterministic retrieval behavior
+- evaluation/regression reliability requires consistent retrieval patterns
+
+Primary profile:
+
+| Setting | Recommended value | Outcome |
+|--------|-------------------|---------|
+| `knowledge.queryType` | `vector_semantic_hybrid` | Balanced recall + precision |
+| `knowledge.strictness` | `4` | Limits unsupported responses |
+| `knowledge.topK` | `10` | Adequate legal context window |
+| `knowledge.inScope` | `true` | Enforces Title 45 boundary |
+| `knowledge.semanticConfiguration` | `policy-semantic-config` | Better statutory relevance |
+
+See [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding)
+for alternative grounding trade-offs.
+
+---
+
 ## Infrastructure (`scripts/bootstrap.ps1` Parameters)
 
 | Parameter | Default | Description |

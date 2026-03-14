@@ -110,6 +110,18 @@ The workflow handles intent-based routing and clarification behavior with explic
 The index is populated using AI Search's built-in **"Import and vectorize data"** portal wizard.
 No custom scraper code is required.
 
+### Why AI Search is the primary grounding choice
+
+For this legal-policy workload, AI Search is chosen over Bing-style web grounding because it provides:
+
+- deterministic retrieval controls (query mode, strictness, Top K)
+- stronger corpus governance for Title 45-only scope
+- stable metadata for section-level citations
+- better repeatability for workflow evaluation and regression tests
+
+See [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding)
+for detailed trade-offs and the decision matrix.
+
 ### Azure OpenAI / AI Services
 
 | Resource | Deployment | SKU | Capacity | Used by |
@@ -231,4 +243,5 @@ No Hub workspace is created — this is the latest Azure AI Foundry architecture
 - [Workflow Architecture]({{ site.baseurl }}/workflow-architecture) — Review workflow node-level routing and clarification behavior
 - [Configuration Reference]({{ site.baseurl }}/configuration) — Tune agent and search settings
 - [Assumptions and Constraints]({{ site.baseurl }}/assumptions-and-constraints) — Confirm scope boundaries and non-goals
+- [Appendix - AI Search vs Bing Custom Grounding]({{ site.baseurl }}/appendix-ai-search-vs-bing-grounding) — Grounding strategy rationale and alternatives
 - [Cost Estimation]({{ site.baseurl }}/cost-estimation) — Understand pricing
