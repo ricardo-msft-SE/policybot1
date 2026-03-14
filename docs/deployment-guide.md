@@ -184,21 +184,149 @@ Use BMV operational content and policy FAQ material for this agent's knowledge s
 
 ## Step 5 — Configure Foundry Workflow Router
 
-Configure the orchestration workflow with these nodes:
+Build the workflow in this exact order so routing is deterministic and easy to test.
 
-1. **Scope guard**: reject non-Title 45 prompts
-2. **Intent classifier**: classify legal reference vs BMV FAQ
-3. **Confidence decision**: high confidence routes immediately
-4. **Clarification question node**: low confidence asks follow-up question
-5. **Reclassification node**: process clarification answer
-6. **Agent invoke node**: call `legal-reference-agent` or `bmv-faq-agent`
-7. **Synthesis and citation check node**: ensure grounded response format
+### 5.1 Define workflow state variables
 
-Clarification behavior policy:
+Create and initialize these state variables at workflow start:
 
-- Allow 1 to 2 follow-up questions maximum
-- If still ambiguous, route to `legal-reference-agent` with explicit uncertainty
-- Preserve citations and route metadata in final payload
+| Variable | Type | Initial value | Purpose |
+|----------|------|---------------|---------|
+| `originalQuestion` | string | user prompt | Preserve original input |
+| `clarificationAnswer` | string | `""` | Store follow-up response |
+| `combinedQuestion` | string | `originalQuestion` | Input for classification after clarification |
+| `intent` | string | `"unknown"` | `legal_reference` or `bmv_faq` |
+| `confidence` | number | `0` | Classifier confidence score |
+| `clarificationTurns` | number | `0` | Guardrail against infinite loops |
+| `routeType` | string | `"unrouted"` | Final selected route |
+| `needsUncertaintyNote` | bool | `false` | Mark unresolved ambiguity |
+
+### 5.2 Node 1 — Scope guard
+
+**Goal:** reject non-Title 45 questions before any agent invocation.
+
+Configuration:
+
+- Input: `combinedQuestion`
+- Output schema: `{ inScope: boolean, reason: string }`
+- Decision rule:
+   - If `inScope == false`, return scope refusal payload and end workflow
+   - If `inScope == true`, continue to Node 2
+
+Recommended refusal template:
+
+> I can only answer questions about Ohio Revised Code Title 45 (Motor Vehicles).
+> For other legal topics please consult codes.ohio.gov or a qualified attorney.
+
+### 5.3 Node 2 — Intent classifier
+
+**Goal:** classify query into one of two routes.
+
+Configuration:
+
+- Input: `combinedQuestion`
+- Allowed labels:
+   - `legal_reference`
+   - `bmv_faq`
+- Output schema: `{ intent: string, confidence: number }`
+
+Store outputs into state variables `intent` and `confidence`.
+
+### 5.4 Node 3 — Confidence decision
+
+**Goal:** decide direct route vs clarification.
+
+Recommended threshold:
+
+- `confidenceThreshold = 0.75`
+
+Branch conditions:
+
+- If `confidence >= 0.75` → direct route to Node 6
+- If `confidence < 0.75` and `clarificationTurns < 2` → Node 4 (clarification)
+- If `confidence < 0.75` and `clarificationTurns >= 2`:
+   - Set `routeType = "legal_reference"`
+   - Set `needsUncertaintyNote = true`
+   - Route to Node 6
+
+### 5.5 Node 4 — Clarification question
+
+**Goal:** ask one targeted follow-up question to improve routing confidence.
+
+Configuration:
+
+- Increment `clarificationTurns = clarificationTurns + 1`
+- Ask one concise follow-up such as:
+   - "Are you asking about what the law says, or about BMV process steps?"
+- Save response in `clarificationAnswer`
+- Update `combinedQuestion = originalQuestion + "\nClarification: " + clarificationAnswer`
+
+Then continue to Node 5.
+
+### 5.6 Node 5 — Reclassification
+
+**Goal:** re-run classification on disambiguated context.
+
+Configuration:
+
+- Input: `combinedQuestion`
+- Output: `{ intent, confidence }`
+- Overwrite state values `intent` and `confidence`
+
+Loop back to Node 3 (Confidence decision).
+
+### 5.7 Node 6 — Agent invoke
+
+**Goal:** call the selected domain agent.
+
+Routing map:
+
+- If `intent == "legal_reference"` or `routeType == "legal_reference"` fallback flag is set
+   - Invoke `legal-reference-agent`
+- If `intent == "bmv_faq"`
+   - Invoke `bmv-faq-agent`
+
+Set `routeType` to the actual invoked route.
+
+### 5.8 Node 7 — Synthesis and citation check
+
+**Goal:** normalize output and enforce grounded response requirements.
+
+Required output contract:
+
+```json
+{
+   "answer": "string",
+   "citations": [],
+   "routeType": "legal_reference|bmv_faq",
+   "confidence": 0.0,
+   "clarificationAsked": false,
+   "needsUncertaintyNote": false
+}
+```
+
+Validation gates:
+
+- If `citations.length == 0`, return grounded not-found response
+- If `needsUncertaintyNote == true`, append explicit uncertainty statement
+- Preserve all source URLs returned by the agent
+
+### 5.9 Clarification policy guardrails
+
+- Allow at most **2** clarification turns per request
+- Ask only routing-oriented questions (no legal advice content)
+- If ambiguity remains after max turns, force `legal_reference` route with uncertainty note
+- Always preserve route metadata for telemetry
+
+### 5.10 Acceptance tests for Step 5
+
+| Input | Expected behavior |
+|------|--------------------|
+| "What are OVI penalties under ORC?" | `legal_reference`, no clarification |
+| "How do I renew plates at BMV?" | `bmv_faq`, no clarification |
+| "Can you help with my driving issue?" | Clarification asked, then routed |
+| "What is the capital of France?" | Scope refusal at Node 1 |
+| Low-confidence ambiguous prompt after 2 clarifications | Forced `legal_reference` + uncertainty note |
 
 ---
 
