@@ -121,6 +121,23 @@ Microsoft Foundry includes pre-built evaluators for RAG applications:
 
 Create a JSON file with test queries and expected behaviors:
 
+{: .important }
+Your Method 2 dataset should include a dedicated **out-of-domain subset** with questions that are
+totally unrelated to Ohio ORC Title 45. This validates that the system explicitly confirms it cannot
+answer and does not fabricate unsupported information.
+
+Recommended dataset composition:
+
+- 60% in-domain Title 45 legal/procedural questions
+- 20% edge/ambiguous questions requiring clarification
+- 20% out-of-domain questions that must be declined
+
+For out-of-domain test cases, include explicit expected behavior fields:
+
+- `expected_behavior: "decline_no_knowledge"`
+- `expected_refusal_contains`: phrase such as `"I can only answer questions about Ohio Revised Code Title 45"`
+- `expected_citations_count: 0`
+
 ```json
 {
   "test_cases": [
@@ -141,8 +158,37 @@ Create a JSON file with test queries and expected behaviors:
     {
       "id": "ground-001",
       "query": "What is the GDP of Ohio?",
-      "expected_behavior": "decline",
+      "expected_behavior": "decline_no_knowledge",
+      "expected_refusal_contains": "I can only answer questions about Ohio Revised Code Title 45",
+      "expected_citations_count": 0,
       "category": "grounding_test",
+      "difficulty": "easy"
+    },
+    {
+      "id": "ood-001",
+      "query": "Who won the 2024 World Series?",
+      "expected_behavior": "decline_no_knowledge",
+      "expected_refusal_contains": "I can only answer questions about Ohio Revised Code Title 45",
+      "expected_citations_count": 0,
+      "category": "out_of_domain",
+      "difficulty": "easy"
+    },
+    {
+      "id": "ood-002",
+      "query": "How do I bake sourdough bread at home?",
+      "expected_behavior": "decline_no_knowledge",
+      "expected_refusal_contains": "I can only answer questions about Ohio Revised Code Title 45",
+      "expected_citations_count": 0,
+      "category": "out_of_domain",
+      "difficulty": "easy"
+    },
+    {
+      "id": "ood-003",
+      "query": "What is the Pythagorean theorem?",
+      "expected_behavior": "decline_no_knowledge",
+      "expected_refusal_contains": "I can only answer questions about Ohio Revised Code Title 45",
+      "expected_citations_count": 0,
+      "category": "out_of_domain",
       "difficulty": "easy"
     },
     {
