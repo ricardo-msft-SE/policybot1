@@ -10,7 +10,7 @@ permalink: /
 {: .fs-9 }
 
 An AI chatbot that answers questions **exclusively** from Ohio Revised Code Title 45 (Motor Vehicles),
-powered by Microsoft Azure AI Foundry — with no custom application code required.
+powered by Microsoft Azure AI Foundry with a backend API security boundary.
 {: .fs-6 .fw-300 }
 
 [Deploy Now]({{ site.baseurl }}/deployment-guide){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
@@ -26,22 +26,24 @@ The Ohio ORC Title 45 Policy Bot is an AI assistant that:
 - **Cites exact sections** — you get quotes and source URLs, not unsourced summaries
 - **Refuses to guess** — if the answer is not in the indexed code, the bot says so
 - **Runs entirely on Azure** — your data stays within your subscription
+- **Uses backend API orchestration** — the UI calls backend API only; no direct client-to-Foundry credentials
 
 ## Design Philosophy
 
-> This project intentionally avoids custom application code. Microsoft Foundry's portal
-> handles agent creation, knowledge source configuration, and web app deployment. The
-> only automation is the initial Azure infrastructure provisioning (`bootstrap.ps1`).
+> The reference design uses a backend API security boundary plus a Foundry workflow
+> router. The workflow can ask follow-up clarification questions before selecting the
+> final domain agent route.
 
 ## Architecture at a Glance
 
 | Component | Azure Service | How It's Configured |
 |-----------|--------------|---------------------|
-| AI Agent | Azure AI Foundry | Foundry portal |
-| Language Model | Azure OpenAI GPT-4o | Foundry portal |
+| Backend API | App Service or AKS | Service endpoint managed by DPS |
+| Workflow Router | Azure AI Foundry | Foundry workflow nodes |
+| Domain Agents | Azure AI Foundry | Two agents: Legal Reference and BMV FAQ |
+| Language Models | Azure OpenAI GPT-4o and GPT-4o-mini | Foundry portal |
 | Knowledge Base | Azure AI Search | Portal "Import and vectorize data" wizard |
 | Web Crawler | AI Search Indexer | Portal — scheduled weekly |
-| Chat Web App | Azure App Service | Foundry "Deploy as web app" button |
 | Monitoring | Application Insights | Deployed via Bicep |
 
 ## Quick Start
@@ -56,7 +58,7 @@ az login
 .\scripts\bootstrap.ps1
 ```
 
-Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for the portal steps (Steps 2-5).
+Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for backend + workflow setup.
 
 ---
 
@@ -64,8 +66,8 @@ Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for the 
 
 | Page | Contents |
 |------|---------|
+| [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) | Primary workflow orchestration design with clarification-question routing |
 | [Architecture]({{ site.baseurl }}/architecture) | Component design, data flow, infrastructure layout |
-| [Workflow Architecture (Alternative)]({{ site.baseurl }}/workflow-architecture-alternative) | Foundry Workflow-based orchestration patterns, routing variants, and visual diagrams |
 | [Deployment Guide]({{ site.baseurl }}/deployment-guide) | Step-by-step portal walkthrough |
 | [Configuration Reference]({{ site.baseurl }}/configuration) | All tuneable settings |
 | [Evaluation Guide]({{ site.baseurl }}/evaluation-guide) | Testing accuracy and groundedness |

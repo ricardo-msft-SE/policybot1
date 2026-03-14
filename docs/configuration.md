@@ -35,13 +35,17 @@ Reference for all tunable settings in the Policy Bot.
 
 ## Agent Settings (`foundry/agent-config.json`)
 
-This file is a **configuration reference** — the actual agent is created in the Foundry portal.
-Use these values when filling in the portal form in [Step 3 of the Deployment Guide]({{ site.baseurl }}/deployment-guide#step-3--create-the-foundry-agent).
+This file is a **configuration reference** — the actual workflow and agents are created in
+the Foundry portal.
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| `model.deployment` | `gpt-4o` | Match your AI Services deployment name |
-| `model.parameters.temperature` | `0.1` | Keep low for factual responses |
+| `workflow.scopeGuard.enabled` | `true` | Reject out-of-scope prompts before routing |
+| `workflow.intentClassifier.enabled` | `true` | Route between legal reference and BMV FAQ |
+| `workflow.confidenceThreshold` | `0.75` (recommended start) | Below threshold triggers clarification |
+| `workflow.maxClarificationTurns` | `2` | Prevent infinite clarification loops |
+| `agents.legalReference.model` | `gpt-4o` | Primary legal/statutory route |
+| `agents.bmvFaq.model` | `gpt-4o-mini` | Secondary procedural route |
 | `knowledge.indexName` | `ohio-title45-index` | Must match the index created in Step 2 |
 | `knowledge.semanticConfiguration` | `policy-semantic-config` | Must match config in Step 2 |
 | `knowledge.queryType` | `vector_semantic_hybrid` | Best for legal text |
@@ -85,22 +89,36 @@ Deployed automatically by `bootstrap.ps1` onto the AI Services resource:
 
 | Deployment Name | Model | SKU | Capacity (TPM) | Purpose |
 |-----------------|-------|-----|-----------------|---------|
-| `gpt-4o` | GPT-4o 2024-08-06 | GlobalStandard | 30,000 | Agent chat responses |
+| `gpt-4o` | GPT-4o 2024-08-06 | GlobalStandard | 30,000 | Workflow and legal reference route |
+| `gpt-4o-mini` | GPT-4o-mini | GlobalStandard | 30,000 | BMV FAQ route |
 | `text-embedding-3-small` | text-embedding-3-small | Standard | 120,000 | Document vectorization |
 
 ---
 
-## System Prompt
+## Backend API Boundary Settings
 
-The system prompt lives in
-[`foundry/prompts/system-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/system-prompt.md).
-Paste its contents (excluding the first `#` heading line) into the Foundry portal when creating the agent.
+Recommended backend configuration:
 
-Key behaviors enforced by the prompt:
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| Managed Identity | Enabled | Secure Foundry invocation |
+| Input validation | Enabled | Block malformed or abusive prompts |
+| Request logging | Enabled | Trace request lifecycle |
+| Response metadata | Include route and clarification flags | Support observability and debugging |
+
+---
+
+## Prompt and Workflow Logic
+
+Prompt files contain domain behavior. Routing behavior lives in workflow nodes.
+
+Key behavior split:
 
 | Rule | Behavior |
 |------|----------|
-| Scope restriction | Only answers questions about ORC Title 45 |
+| Scope restriction | Scope guard node rejects non-Title 45 prompts |
+| Clarification loop | Workflow asks follow-up questions under low confidence |
+| Routing decision | Workflow routes to legal reference or BMV FAQ agent |
 | Grounding | Only uses information from search results |
 | Citation | Every factual claim must include an exact quote + URL |
 | Uncertainty | Explicitly says "I couldn't find" rather than guessing |

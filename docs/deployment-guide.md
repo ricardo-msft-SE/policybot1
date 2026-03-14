@@ -1,14 +1,15 @@
 ---
 layout: default
 title: Deployment Guide
-nav_order: 3
+nav_order: 4
 ---
 
 # Deployment Guide
 {: .no_toc }
 
-Portal-first approach. After the infrastructure script runs (~10 min), the remaining
-steps are portal clicks — no SDK code required.
+Deployment follows a **backend API plus Foundry workflow** pattern. After infrastructure deploys,
+configure backend API integration, index grounding data, create two domain agents, and wire the
+workflow router.
 
 ## Table of contents
 {: .no_toc .text-delta }
@@ -51,6 +52,7 @@ What `bootstrap.ps1` creates:
 - Application Insights + Log Analytics workspace
 - **Foundry Project** (`policybot-project`) linked directly to AI Services — no Hub workspace required
 - AI Search connection (`aisearch-conn`) registered on the Project
+- Baseline services used by backend API and workflow orchestration
 
 When it finishes, the script prints a **configuration summary** with endpoints — keep this
 window open for the next steps.
@@ -60,7 +62,47 @@ To skip infrastructure if already deployed: `.\scripts\bootstrap.ps1 -SkipInfra`
 
 ---
 
-## Step 2 — Index Ohio Revised Code Title 45
+## Step 2 — Deploy Backend API Layer
+
+Deploy or configure the backend API as the orchestration and security boundary.
+
+Required backend responsibilities:
+
+- Receive prompt payload from UI
+- Validate and sanitize request data
+- Authenticate to Foundry using Managed Identity
+- Invoke the workflow endpoint
+- Return normalized response with citations and routing metadata
+- Emit telemetry to Application Insights
+
+Recommended endpoint contract:
+
+```json
+POST /api/chat
+{
+   "question": "string",
+   "sessionId": "string",
+   "userId": "string"
+}
+```
+
+```json
+200 OK
+{
+   "answer": "string",
+   "citations": [],
+   "routeType": "legal_reference|bmv_faq",
+   "clarificationAsked": true
+}
+```
+
+{: .warning }
+Keep AI logic in Foundry workflow and domain agents. The backend API should not perform
+legal reasoning.
+
+---
+
+## Step 3 — Index Ohio Revised Code Title 45
 
 Use the Azure AI Search portal wizard to crawl and vectorize Title 45. No scraper code needed.
 
@@ -102,155 +144,112 @@ python scripts\configure-search.py create-index
 
 ---
 
-## Step 3 — Create the Foundry Agents
+## Step 4 — Create the Foundry Domain Agents
 
-The system uses **five agents**: four specialists and one Orchestrator. Create the specialists
-first — the Orchestrator must connect to them as tools, so they must exist first.
+Create two domain agents first. The workflow router references these agents.
 
 > **Open:** [ai.azure.com](https://ai.azure.com) → Project **`policybot-project`** → **Agents** → **New agent**
 
-### 3a. Definitions Agent
+### 4a. Primary Agent — Legal Reference
 
 | Field | Value |
 |-------|-------|
-| Name | `definitions-agent` |
+| Name | `legal-reference-agent` |
 | Model | `gpt-4o` |
-| Temperature | `0` |
+| Temperature | `0.1` |
 
-In the **Instructions** box, paste the full contents of
-[`foundry/prompts/definitions-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/definitions-agent-prompt.md).
-
-Under **Knowledge** → **Add** → **Azure AI Search**:
+Configure grounding:
 
 | Field | Value |
 |-------|-------|
 | Connection | `aisearch-conn` |
 | Index | `ohio-title45-index` |
 | Search type | `Hybrid (vector + keyword)` |
-| Semantic ranker | Enabled — `policy-semantic-config` |
+| Semantic ranker | `policy-semantic-config` |
 | Top K | `10` |
 | Strictness | `4` |
 | In scope only | ✅ Enabled |
 
-Click **Save**. Copy the agent ID — you will need it for the Orchestrator.
-
----
-
-### 3b. Traffic & Violations Agent
+### 4b. Secondary Agent — BMV FAQ
 
 | Field | Value |
 |-------|-------|
-| Name | `traffic-violations-agent` |
-| Model | `gpt-4o` |
-| Temperature | `0` |
-
-Paste [`foundry/prompts/traffic-violations-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/traffic-violations-agent-prompt.md)
-into the Instructions box. Apply the same Knowledge settings as Step 3a. Click **Save**.
-
----
-
-### 3c. Licensing & Registration Agent
-
-| Field | Value |
-|-------|-------|
-| Name | `licensing-agent` |
+| Name | `bmv-faq-agent` |
 | Model | `gpt-4o-mini` |
 | Temperature | `0.1` |
 
-Paste [`foundry/prompts/licensing-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/licensing-agent-prompt.md)
-into the Instructions box. Apply the same Knowledge settings. Click **Save**.
+Use BMV operational content and policy FAQ material for this agent's knowledge source.
 
 ---
 
-### 3d. Legal Reasoning Agent
+## Step 5 — Configure Foundry Workflow Router
 
-| Field | Value |
-|-------|-------|
-| Name | `legal-reasoning-agent` |
-| Model | `o3-mini` |
-| Temperature | `1` ⚠️ required for reasoning models |
-| Max tokens | `8192` (reasoning uses more tokens) |
+Configure the orchestration workflow with these nodes:
 
-Paste [`foundry/prompts/legal-reasoning-agent-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/legal-reasoning-agent-prompt.md)
-into the Instructions box. Apply the same Knowledge settings. Click **Save**.
+1. **Scope guard**: reject non-Title 45 prompts
+2. **Intent classifier**: classify legal reference vs BMV FAQ
+3. **Confidence decision**: high confidence routes immediately
+4. **Clarification question node**: low confidence asks follow-up question
+5. **Reclassification node**: process clarification answer
+6. **Agent invoke node**: call `legal-reference-agent` or `bmv-faq-agent`
+7. **Synthesis and citation check node**: ensure grounded response format
 
-{: .warning }
-`o3-mini` **requires temperature=1**. Setting it to 0 will cause API errors. Do not set
-`topP` or `frequencyPenalty` for o3-mini — they are not supported on reasoning models.
+Clarification behavior policy:
 
----
-
-### 3e. Orchestrator Agent (create last)
-
-| Field | Value |
-|-------|-------|
-| Name | `orchestrator` |
-| Model | `gpt-4o` |
-| Temperature | `0.1` |
-
-Paste [`foundry/prompts/orchestrator-prompt.md`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/prompts/orchestrator-prompt.md)
-into the Instructions box. Apply the same Knowledge settings.
-
-**Connect the four specialists as tools:**
-
-1. Click **"Add a tool"** → **"Agent"**
-2. Select `definitions-agent` → Tool name: `definitions-agent`
-3. Repeat for `traffic-violations-agent`, `licensing-agent`, `legal-reasoning-agent`
-
-Your tool list should look like:
-
-| Tool name | Agent |
-|-----------|-------|
-| `definitions-agent` | Definitions Agent |
-| `traffic-violations-agent` | Traffic & Violations Agent |
-| `licensing-agent` | Licensing & Registration Agent |
-| `legal-reasoning-agent` | Legal Reasoning Agent |
-
-Click **Save**.
+- Allow 1 to 2 follow-up questions maximum
+- If still ambiguous, route to `legal-reference-agent` with explicit uncertainty
+- Preserve citations and route metadata in final payload
 
 ---
 
-## Step 4 — Test in the Playground
+## Step 6 — Test in the Playground and API
 
-Open the **`orchestrator`** agent and click **"Try in playground"**.
+Test both workflow behavior and backend API behavior.
+
+Open the workflow entry point and click **"Try in playground"**.
 Test with these sample questions:
 
 | Question | Expected routing + behavior |
 |----------|-----------------------------|
-| *"What is the legal definition of a vehicle in Ohio?"* | → Definitions Agent → verbatim ORC § 4501.01 quote |
-| *"What are the penalties for OVI (drunk driving)?"* | → Traffic & Violations Agent → penalty table from ORC § 4511.19 |
-| *"How do I renew my driver's license in Ohio?"* | → Licensing Agent → numbered steps with ORC § 4507.x citations |
-| *"My license expired 2 weeks ago. Am I still allowed to drive to the BMV to renew?"* | → Legal Reasoning Agent → step-by-step analysis + conclusion + disclaimer |
-| *"What is the capital of France?"* | Orchestrator scope refusal — no routing |
-| *"What does Title 1 of the ORC say?"* | Orchestrator out-of-scope refusal |
+| *"What does ORC say about OVI penalties?"* | Route to `legal-reference-agent` |
+| *"How do I renew my license at BMV?"* | Route to `bmv-faq-agent` |
+| *"Can you help me with this driving issue?"* | Clarification question asked before routing |
+| *"What is the capital of France?"* | Scope refusal |
 
-**Signs the multi-agent system is configured correctly:**
-- ✅ The Orchestrator invokes a specialist tool (visible in the "activity" or "trace" panel)
+**Signs the workflow system is configured correctly:**
+- ✅ Workflow shows node-by-node route decisions in trace/activity
+- ✅ Low-confidence prompts trigger follow-up clarification question
+- ✅ Follow-up response causes reclassification and final route selection
 - ✅ Responses include exact quotes and `codes.ohio.gov` source URLs
-- ✅ Off-topic questions are declined without routing to any specialist
-- ✅ o3-mini responses include a visible reasoning chain before the conclusion
+- ✅ Off-topic questions are declined before agent invocation
 
-If the Orchestrator answers directly without calling a tool, verify the connected agents are
-added and the orchestrator system prompt is fully pasted.
+Also test the backend endpoint directly and confirm route metadata is present in payload.
 
 ---
 
-## Step 5 — Deploy the Chat Web App
+## Step 7 — Deploy or Integrate Client UI
 
-1. From the Chat Playground, click **"Deploy"** → **"As a web app"**
-2. Configure:
+1. Configure the UI to call backend endpoint `POST /api/chat`
+2. Ensure no Foundry credentials are present in client code
+3. Verify UI can render:
 
-   | Field | Value |
-   |-------|-------|
-   | Subscription | `ee0073ce-de38-45ed-a940-4dbfd9435dc1` |
-   | Resource group | `rg-policybot` |
-   | App name | `policybot-webapp` |
-   | Pricing plan | F1 for testing / B1 for production |
+   - Answer text
+   - Citations and source URLs
+   - Clarification prompts from workflow
 
-3. Click **Deploy** — takes about 3 minutes
-4. Once deployed, the portal shows the web app URL
+Optional: deploy Foundry-provided web app for demonstration environments.
 
-Share the URL (`https://policybot-webapp.azurewebsites.net`) with users.
+---
+
+## Step 8 — Enable Observability
+
+In Application Insights, track:
+
+- request count and latency by route type
+- clarification question rate
+- out-of-scope refusal rate
+- citation completeness failures
+- workflow node errors
 
 ---
 
@@ -271,11 +270,11 @@ If weekly scheduling is configured in Step 2, this happens automatically.
 |---------|-------------|-----|
 | Agent answers from general knowledge (no citations) | `In scope only` is off | Re-check knowledge source settings |
 | "I couldn't find" for valid Title 45 questions | Index not populated | Check indexer status; wait for crawl to finish |
-| Web app returns 503 | App Service cold start (F1 tier) | Wait 30 seconds and refresh |
+| Backend API returns 401 to Foundry | Managed Identity or RBAC missing | Reconfigure identity and role assignments |
+| Clarification never appears | Confidence threshold too low | Increase threshold in workflow decision node |
+| Workflow always asks follow-up | Threshold too high | Lower threshold and retest with sample prompts |
 | Indexer shows 0 documents | Site blocked portal crawler | Use `configure-crawler.ps1` script alternative |
 | `bootstrap.ps1` fails at model deployment | TPM quota limit | Reduce capacity or switch `Location` to another region |
 | Agent not found in Foundry portal | Wrong project selected | Ensure `policybot-project` is selected |
 | `az ml workspace create` fails on hub-less | Old az ml extension | Run `az extension update --name ml` |
-| Orchestrator answers without calling a tool | Specialists not connected | Re-add connected agents in Orchestrator config |
-| `o3-mini` returns API error about temperature | Temperature not set to 1 | Set temperature=1; remove `topP` and `frequencyPenalty` |
-| Legal Reasoning Agent gives no answer | Max tokens too low for reasoning | Set max tokens to 8192 or higher |
+| Wrong route selected | Classifier prompt or examples insufficient | Add classifier examples and retest |

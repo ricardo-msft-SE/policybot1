@@ -1,10 +1,10 @@
 ---
 layout: default
-title: Workflow Architecture (Alternative)
-nav_order: 4
+title: Workflow Architecture
+nav_order: 3
 ---
 
-# Workflow Architecture (Alternative)
+# Workflow Architecture
 {: .no_toc }
 
 ## Table of contents
@@ -15,13 +15,13 @@ nav_order: 4
 
 ---
 
-## Why this alternative exists
+## Why this is the recommended design
 
-The current design uses an **Orchestrator Agent** that classifies intent in its prompt and then
-calls one specialist agent. This page documents an alternative where **Microsoft Foundry Workflow**
-coordinates routing and control flow explicitly.
+This design uses **Microsoft Foundry Workflow** as the orchestration layer and a
+**backend API** as the security and integration boundary. The workflow performs
+scope checks, intent routing, and clarification handling before invoking a domain agent.
 
-Use this alternative when you want:
+Use this architecture when you need:
 
 - more deterministic routing behavior
 - node-level observability and troubleshooting
@@ -30,32 +30,29 @@ Use this alternative when you want:
 
 ---
 
-## Current vs Workflow-Orchestrated
+## Key Principles
+
+- Backend API is the orchestration and security boundary
+- Foundry workflow owns routing policy, not prompt-only logic
+- Domain agents are specialized by intent
+- The system can ask follow-up clarification questions before final routing
+- All answers remain grounded with citations
+
+---
+
+## Backend and Workflow Topology
 
 ```mermaid
 flowchart LR
-    subgraph Current[Current: Agent-Orchestrated]
-      U1[User] --> O1[Orchestrator Agent]
-      O1 --> S1[Specialist Agent]
-      S1 --> R1[Final Response]
-    end
-
-    subgraph Workflow[Alternative: Workflow-Orchestrated]
-      U2[User] --> W0[Workflow Entry]
-      W0 --> G[Scope Guardrail]
-      G --> C[Intent Classifier]
-      C --> D{Route Decision}
-      D --> SD[Definitions Agent]
-      D --> ST[Traffic Violations Agent]
-      D --> SL[Licensing Agent]
-      D --> SR[Legal Reasoning Agent]
-      SD --> F[Synthesis + Format]
-      ST --> F
-      SL --> F
-      SR --> F
-      F --> T[Telemetry + Eval]
-      T --> R2[Final Response]
-    end
+    U[User] --> UI[Client UI Layer]
+    UI --> API[Backend API Layer]
+    API --> WF[Foundry Workflow]
+    WF --> LEGAL[Primary Agent Legal Reference]
+    WF --> FAQ[Secondary Agent BMV FAQ]
+    LEGAL --> OUT[Response and citations]
+    FAQ --> OUT
+    OUT --> API
+    API --> UI
 ```
 
 ---
@@ -64,27 +61,26 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[Start: User Question] --> B{Title 45 Scope Check}
-  B -- No --> B1[Refusal Template - Out-of-scope response]
-  B -- Yes --> C[Intent Classification - Label and Confidence]
+    A[Start User question] --> B{Title 45 scope check}
+    B -- No --> B1[Out of scope refusal]
+    B -- Yes --> C[Intent classification]
 
-  C --> D{Confidence meets threshold?}
-  D -- No --> R[Route to legal-reasoning-agent - Fallback for ambiguity]
-    D -- Yes --> E{Intent Label}
+    C --> D{Confidence meets threshold}
+    D -- No --> FQ[Ask follow-up clarification]
+    FQ --> UA[User clarification answer]
+    UA --> RC[Reclassify intent]
+    RC --> E{Route decision}
+    D -- Yes --> E{Route decision}
 
-    E -- definition --> D1[Invoke definitions-agent]
-    E -- traffic_violation --> D2[Invoke traffic-violations-agent]
-    E -- licensing --> D3[Invoke licensing-agent]
-    E -- legal_reasoning --> D4[Invoke legal-reasoning-agent]
+    E -- legal reference --> D1[Invoke Primary Agent Legal Reference]
+    E -- bmv faq --> D2[Invoke Secondary Agent BMV FAQ]
 
-    D1 --> S[Synthesis & Citation Preservation]
+    D1 --> S[Synthesis and citation preservation]
     D2 --> S
-    D3 --> S
-    D4 --> S
 
-    S --> Q{Citations present?}
-    Q -- No --> Q1[Return grounded not-found response]
-    Q -- Yes --> M[Telemetry - route confidence latency]
+    S --> Q{Citations present}
+    Q -- No --> Q1[Return grounded not found response]
+    Q -- Yes --> M[Emit telemetry and return]
 
     B1 --> Z[Return]
     Q1 --> Z
@@ -105,27 +101,30 @@ same routing logic view:
 ```mermaid
 sequenceDiagram
     participant User
+    participant UI as Client UI
+    participant API as Backend API
     participant WF as Foundry Workflow
-    participant Guard as Scope Guard Node
-    participant Clf as Intent Classifier Node
-    participant Router as Route Decision Node
-    participant Spec as Specialist Agent Node
-    participant Synth as Synthesis Node
-    participant Obs as Telemetry Node
+    participant Agent as Domain Agent
 
-    User->>WF: Ask question
-    WF->>Guard: Validate Title 45 scope
-    Guard-->>WF: in_scope / out_of_scope
+    User->>UI: Ask question
+    UI->>API: POST question
+    API->>WF: Start workflow
+    WF->>WF: Scope and intent checks
 
     alt out_of_scope
-      WF-->>User: Scope refusal
+      WF-->>API: Scope refusal
+      API-->>UI: Refusal payload
     else in_scope
-      WF->>Clf: Classify intent
-      Clf-->>Router: label + confidence
-      Router->>Spec: Invoke selected specialist
-      Spec-->>Synth: Grounded answer + citations
-      Synth->>Obs: Emit metrics + route outcome
-      Synth-->>User: Final response
+      alt confidence low
+        WF-->>API: Clarification question
+        API-->>UI: Ask follow-up question
+        UI->>API: Clarification response
+        API->>WF: Continue workflow
+      end
+      WF->>Agent: Invoke selected domain agent
+      Agent-->>WF: Grounded answer and citations
+      WF-->>API: Final payload and route metadata
+      API-->>UI: Final response
     end
 ```
 
@@ -140,21 +139,19 @@ shows the same execution path:
 
 ## Workflow Possibilities (Design Variants)
 
-### 1) Single-Classifer Router (simplest)
+### 1) Single classifier router (simplest)
 
 ```mermaid
 flowchart LR
     Q[Question] --> C[Classifier]
     C --> R{Route}
-    R --> A1[Definitions]
-    R --> A2[Traffic]
-    R --> A3[Licensing]
-    R --> A4[Legal Reasoning]
+  R --> A1[Primary Legal Reference]
+  R --> A2[Secondary BMV FAQ]
 ```
 
 Best when you need predictable behavior with minimal operational overhead.
 
-### 2) Two-Stage Router (higher precision)
+### 2) Two-stage router with clarification loop
 
 ```mermaid
 flowchart LR
@@ -162,23 +159,22 @@ flowchart LR
     G -- No --> X[Refuse]
     G -- Yes --> C[Classifier]
     C --> V{High confidence?}
-    V -- No --> A4[Legal Reasoning]
-    V -- Yes --> R{Route}
-    R --> A1[Definitions]
-    R --> A2[Traffic]
-    R --> A3[Licensing]
+  V -- No --> F[Ask follow-up question then reclassify]
+  V -- Yes --> R{Route}
+  R --> A1[Primary Legal Reference]
+  R --> A2[Secondary BMV FAQ]
 ```
 
 Best when reducing misroutes is more important than raw latency.
 
-### 3) Parallel Candidate + Ranker (maximum robustness)
+### 3) Parallel candidate plus ranker
 
 ```mermaid
 flowchart LR
-  Q[Question] --> P[Parallel candidate retrieval - top 2 specialists]
+    Q[Question] --> P[Parallel candidate retrieval top two routes]
     P --> S1[Candidate response A]
     P --> S2[Candidate response B]
-    S1 --> K[Ranker / policy checker]
+    S1 --> K[Ranker and policy checker]
     S2 --> K
     K --> O[Best grounded response]
 ```
@@ -187,22 +183,30 @@ Best for ambiguous questions, but highest cost and latency.
 
 ---
 
-## Mapping to Existing Agents
+## Mapping to Domain Agents
 
-This workflow design reuses the existing specialist agents and keeps their role boundaries:
+| Workflow route label | Domain agent |
+|----------------------|-------------|
+| `legal_reference` | Primary Agent Legal Reference |
+| `bmv_faq` | Secondary Agent BMV FAQ |
 
-| Workflow route label | Existing connected agent |
-|----------------------|--------------------------|
-| `definition` | `definitions-agent` |
-| `traffic_violation` | `traffic-violations-agent` |
-| `licensing` | `licensing-agent` |
-| `legal_reasoning` | `legal-reasoning-agent` |
+---
+
+## Non-Goals
+
+- No authentication workflows for end users in this release
+- No transactional operations
+- No database writes from agent responses
+- No legal advice output
+- No use of PDF files as grounding source
+- No unrestricted general internet knowledge
+- No autonomous agentic actions
 
 ---
 
 ## Operational Benefits and Trade-offs
 
-| Dimension | Current Orchestrator Agent | Workflow-Orchestrated Alternative |
+| Dimension | Prompt-only Orchestrator | Workflow-Orchestrated Design |
 |-----------|----------------------------|-----------------------------------|
 | Routing transparency | Prompt-dependent | Explicit decision nodes |
 | Determinism | Medium | High |
@@ -213,12 +217,12 @@ This workflow design reuses the existing specialist agents and keeps their role 
 
 ---
 
-## Suggested Adoption Path
+## Follow-Up Question Policy
 
-1. Keep current architecture as production baseline.
-2. Implement a workflow in parallel for shadow traffic.
-3. Compare route accuracy, citation completeness, latency, and refusal correctness.
-4. Promote workflow to primary path when metrics are equal or better.
+- Ask follow-up questions only when classification confidence is below threshold
+- Limit to one or two clarification turns per user query
+- If ambiguity remains, route to Primary Agent Legal Reference with explicit uncertainty text
+- Preserve user context and citations across clarification turns
 
 ---
 
@@ -226,4 +230,5 @@ This workflow design reuses the existing specialist agents and keeps their role 
 
 - [Architecture]({{ site.baseurl }}/architecture)
 - [Configuration Reference]({{ site.baseurl }}/configuration)
+- [Deployment Guide]({{ site.baseurl }}/deployment-guide)
 - [Evaluation Guide]({{ site.baseurl }}/evaluation-guide)

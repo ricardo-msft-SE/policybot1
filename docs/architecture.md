@@ -17,65 +17,79 @@ nav_order: 2
 
 ## Overview
 
-The Policy Bot uses a **multi-agent Retrieval-Augmented Generation (RAG)** architecture built
-entirely on Microsoft Azure AI Foundry. An **Orchestrator** classifies each user question and
-routes it to the most appropriate **Specialist Agent**, each of which is tuned with a different
-model and system prompt for its topic domain. All agents are grounded exclusively on
-`ohio-title45-index` — they cannot draw on training knowledge for legal responses.
+The Policy Bot uses a **backend API plus workflow orchestration architecture** on Azure.
+The external UI sends questions to a backend API endpoint, and the backend invokes a
+Foundry workflow that classifies and routes queries to domain agents.
+
+The runtime path is:
+
+1. External UI receives the user question
+2. Backend API validates input and applies security policy
+3. Foundry workflow performs scope check, intent classification, and route decision
+4. Workflow routes to either the Legal Reference Agent or BMV FAQ Agent
+5. Workflow may ask follow-up clarification questions when confidence is low
+6. Response is returned through the backend API with citations and telemetry
 
 ```mermaid
 flowchart LR
-    User["👤 User"] --> WebApp["Chat Web App\n(App Service)"]
-    WebApp --> Orch["Orchestrator\n(gpt-4o, temp=0.1)"]
-
-    Orch -->|"Definition query"| Def["Definitions Specialist\n(gpt-4o, temp=0)"]
-    Orch -->|"Traffic / penalty query"| Viol["Traffic & Violations\nSpecialist\n(gpt-4o, temp=0)"]
-    Orch -->|"Registration / license\nprocedure query"| Lic["Licensing & Registration\nSpecialist\n(gpt-4o-mini, temp=0.1)"]
-    Orch -->|"Complex multi-section\nanalysis"| Reason["Legal Reasoning\nSpecialist\n(o3-mini, temp=1)"]
-
-    Def --> Search["Azure AI Search\nohio-title45-index"]
-    Viol --> Search
-    Lic --> Search
-    Reason --> Search
-
-    Crawler["AI Search\nWeb Crawler\n(weekly schedule)"] --> Search
-    Ohio["codes.ohio.gov\n/ohio-revised-code/title-45"] --> Crawler
-
-    style Orch fill:#e8f4fd,stroke:#0078d4
-    style Def fill:#d4edda,stroke:#28a745
-    style Viol fill:#fde8e8,stroke:#d43f3f
-    style Lic fill:#fff4e8,stroke:#c8a951
-    style Reason fill:#ede8fd,stroke:#6f42c1
-    style Search fill:#fff4e8,stroke:#ff8c00
-    style WebApp fill:#e8fde8,stroke:#00a86b
-    style Crawler fill:#fdf4e8,stroke:#c8a951
+    U[External UI] --> API[Backend API Layer]
+    API --> WF[Foundry Orchestration Workflow]
+    WF --> L[Legal Reference Agent]
+    WF --> B[BMV FAQ Agent]
+    L --> SEARCH[Azure AI Search Index]
+    B --> SEARCH
+    SEARCH --> SRC[codes.ohio.gov Title 45]
+    API --> APPI[Application Insights]
+    WF --> APPI
 ```
 
 ---
 
 ## Component Details
 
-### Foundry Agents
+### External UI Layer
 
-All agents are created in the [ai.azure.com](https://ai.azure.com) portal. Configuration
-reference: [`foundry/agent-config.json`](https://github.com/ricardo-msft-SE/policybot1/blob/main/foundry/agent-config.json).
-System prompts: [`foundry/prompts/`](https://github.com/ricardo-msft-SE/policybot1/tree/main/foundry/prompts).
+| Responsibility | Notes |
+|----------------|-------|
+| Collect user prompts | UI accepts free-text legal and procedural questions |
+| Display response and citations | Shows answer plus source URLs |
+| Avoid backend credentials | No direct Foundry or search credentials in client |
 
-| Agent | Model | Temp | ORC Focus | System Prompt |
-|-------|-------|------|-----------|---------------|
-| **Orchestrator** | `gpt-4o` (2024-08-06) | 0.1 | All of Title 45 — routes + synthesizes | `orchestrator-prompt.md` |
-| **Definitions Specialist** | `gpt-4o` (2024-08-06) | 0 | Chapter 4501 — verbatim definitions | `definitions-agent-prompt.md` |
-| **Traffic & Violations Specialist** | `gpt-4o` (2024-08-06) | 0 | Chapter 4511 — penalties, OVI | `traffic-violations-agent-prompt.md` |
-| **Licensing & Registration Specialist** | `gpt-4o-mini` (2024-07-18) | 0.1 | Chapters 4503, 4507 — procedures | `licensing-agent-prompt.md` |
-| **Legal Reasoning Specialist** | `o3-mini` (2025-01-31) | 1* | Cross-chapter — complex analysis | `legal-reasoning-agent-prompt.md` |
+### Backend API Layer (Security Boundary)
 
-*Temperature=1 is required for o3-mini (all OpenAI reasoning models).
+| Responsibility | Notes |
+|----------------|-------|
+| Request validation | Input checks, scope heuristics, anti-abuse controls |
+| Service-to-service auth | Managed Identity when calling Foundry services |
+| Orchestration entry point | Invokes workflow and returns normalized response |
+| No AI business logic | Backend does not perform legal reasoning itself |
+| Telemetry | Emits request, latency, and error traces to Application Insights |
+
+### Foundry Orchestration Workflow
+
+The workflow handles intent-based routing and clarification behavior with explicit nodes.
+
+| Node | Purpose |
+|------|---------|
+| Scope guard | Reject non-Title 45 questions |
+| Intent classifier | Determine Legal Reference vs BMV FAQ intent |
+| Confidence decision | Route immediately or ask follow-up question |
+| Clarification handler | Ask user follow-up question and reclassify |
+| Route executor | Invoke selected domain agent |
+| Synthesis and citation check | Preserve citations and return grounded output |
+
+### Domain Agents
+
+| Agent | Primary use case | Notes |
+|-------|------------------|-------|
+| Legal Reference Agent | Statutory interpretation and section-specific legal questions | Grounded to Title 45 search index |
+| BMV FAQ Agent | Operational and procedural BMV questions | Uses curated FAQ and policy content |
 
 **Shared knowledge settings (all agents):**
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| Knowledge source | Azure AI Search | Grounds all answers |
+| Knowledge source | Azure AI Search | Grounds all legal responses |
 | Query type | `vector_semantic_hybrid` | Best recall for legal language |
 | Top K | `10` | Retrieve 10 most relevant chunks |
 | Strictness | `4` | High confidence required before including a chunk |
@@ -100,17 +114,16 @@ No custom scraper code is required.
 
 | Resource | Deployment | SKU | Capacity | Used by |
 |----------|-----------|-----|----------|---------|
-| AI Services | `gpt-4o` | GlobalStandard | 30K TPM | Orchestrator, Definitions, Traffic agents |
-| AI Services | `gpt-4o-mini` | GlobalStandard | 30K TPM | Licensing & Registration agent |
-| AI Services | `o3-mini` | GlobalStandard | 10K TPM | Legal Reasoning agent |
+| AI Services | `gpt-4o` | GlobalStandard | 30K TPM | Workflow and Legal Reference agent |
+| AI Services | `gpt-4o-mini` | GlobalStandard | 30K TPM | BMV FAQ agent |
 | AI Services | `text-embedding-3-small` | Standard | 120K TPM | AI Search vector indexing |
 
 All four model deployments are created automatically by `scripts/bootstrap.ps1`.
 
-### Chat Web App
+### Backend Hosting
 
-Deployed directly from the Foundry Chat Playground via **Deploy → As a web app**.
-Microsoft maintains this UI — updates and security patches are applied automatically.
+The backend API can be hosted in App Service, AKS, or another DPS-approved compute host.
+This layer is the required security and orchestration boundary between client UI and Foundry.
 
 ### Monitoring
 
@@ -126,33 +139,34 @@ Microsoft maintains this UI — updates and security patches are applied automat
 ```mermaid
 sequenceDiagram
     participant User
-    participant WebApp as Chat Web App
-    participant Orch as Orchestrator (gpt-4o)
-    participant Specialist as Specialist Agent
-    participant Search as AI Search
+        participant UI as External UI
+        participant API as Backend API
+        participant WF as Foundry Workflow
+        participant AG as Domain Agent
+        participant Search as AI Search
 
-    User->>WebApp: Submits question
-    WebApp->>Orch: Forwards message
+        User->>UI: Submit question
+        UI->>API: POST chat request
+        API->>WF: Invoke orchestration workflow
+        WF->>WF: Scope and intent classification
 
-    Note over Orch: Classifies question type
-    Note over Orch: Selects specialist tool to invoke
+        alt confidence low
+            WF-->>UI: Follow-up clarification question
+            UI->>WF: Clarification answer
+            WF->>WF: Reclassify intent
+        end
 
-    Orch->>Specialist: Calls specialist agent as tool
-    Specialist->>Search: Hybrid query (vector + semantic + keyword)
-    Search-->>Specialist: Top 10 chunks with relevance scores
-
-    Note over Specialist: Discard chunks below strictness=4
-    Note over Specialist: Compose grounded specialist response
-
-    Specialist-->>Orch: Specialist response + citations
-    Note over Orch: Synthesizes final reply
-    Orch-->>WebApp: Final response + exact quotes + source URLs
-    WebApp-->>User: Formatted answer with citations
+        WF->>AG: Invoke Legal Reference or BMV FAQ agent
+        AG->>Search: Retrieve grounded context
+        Search-->>AG: Relevant chunks with citations
+        AG-->>WF: Grounded answer
+        WF-->>API: Response with citations and route metadata
+        API-->>UI: Final response payload
+        UI-->>User: Render answer and sources
 ```
 
-If no chunks pass the strictness threshold, the specialist returns a scope disclaimer.
-The Orchestrator forwards this disclaimer — it never adds information not present in
-the retrieved content.
+If no chunks pass the strictness threshold, the workflow returns a grounded
+"could not find" response instead of guessing.
 
 ---
 
@@ -181,11 +195,21 @@ No Hub workspace is created — this is the latest Azure AI Foundry architecture
 
 | Concern | Approach |
 |---------|----------|
-| Authentication | Entra ID (DefaultAzureCredential) |
+| Authentication | Entra ID and Managed Identity for service-to-service calls |
 | Authorization | Azure RBAC — least privilege |
 | Data boundary | All data stays within the Azure subscription |
 | Content filtering | Azure OpenAI default content policy enabled |
-| In-scope enforcement | `in_scope=true` on knowledge source + system prompt restriction |
+| In-scope enforcement | Scope guard node plus `in_scope=true` grounding settings |
+
+---
+
+## Non-Goals
+
+- No legal advice
+- No transactions
+- No database modifications
+- No unrestricted internet knowledge as a source
+- No autonomous agentic actions beyond response generation
 
 ---
 
@@ -193,16 +217,17 @@ No Hub workspace is created — this is the latest Azure AI Foundry architecture
 
 | Component | Scaling Method |
 |-----------|---------------|
-| Foundry Agent | Automatic (platform-managed) |
+| Backend API | App Service or AKS horizontal scaling |
+| Foundry Workflow | Automatic (platform-managed) |
 | AI Search | Manual replica count (up to 12 replicas on Standard) |
 | Azure OpenAI | TPM quota — adjustable in AI Services |
-| Chat Web App | App Service plan scaling |
+| Client UI | Independent from backend and Foundry scaling |
 
 ---
 
 ## Next Steps
 
 - [Deployment Guide]({{ site.baseurl }}/deployment-guide) — Deploy this architecture
-- [Workflow Architecture (Alternative)]({{ site.baseurl }}/workflow-architecture-alternative) — Evaluate explicit workflow-based orchestration patterns
+- [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) — Review workflow node-level routing and clarification behavior
 - [Configuration Reference]({{ site.baseurl }}/configuration) — Tune agent and search settings
 - [Cost Estimation]({{ site.baseurl }}/cost-estimation) — Understand pricing
