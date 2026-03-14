@@ -68,8 +68,9 @@ Then follow the [Deployment Guide]({{ site.baseurl }}/deployment-guide) for back
 
 | Page | Contents |
 |------|---------|
-| [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) | Primary workflow orchestration design with clarification-question routing |
+| [Home]({{ site.baseurl }}/) | Overview and quick-start entry point |
 | [Architecture]({{ site.baseurl }}/architecture) | Component design, data flow, infrastructure layout |
+| [Workflow Architecture]({{ site.baseurl }}/workflow-architecture-alternative) | Primary workflow orchestration design with clarification-question routing |
 | [Deployment Guide]({{ site.baseurl }}/deployment-guide) | Step-by-step portal walkthrough |
 | [Configuration Reference]({{ site.baseurl }}/configuration) | All tuneable settings |
 | [Evaluation Guide]({{ site.baseurl }}/evaluation-guide) | Testing accuracy and groundedness |
